@@ -88,11 +88,123 @@ form div {
     margin-bottom: 10px;
 }
 
-input[type="text"], textarea {
+input[type="text"], textarea, select {
     padding: 8px;
     border: 1px solid #ddd;
 }
 
 textarea {
     resize: vertical;
+}
+
+/* Badges de Prioridade */
+.badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-weight: bold;
+    color: white;
+}
+
+.prioridade-urgente {
+    background-color: #dc3545;
+}
+
+.prioridade-alta {
+    background-color: #fd7e14;
+}
+
+.prioridade-média {
+    background-color: #007bff;
+}
+
+.badge-concluida {
+    background-color: #28a745;
+}
+
+/* Filtros */
+.filtros {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filtro-btn {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 4px;
+    text-decoration: none;
+    color: #333;
+    background-color: #e9ecef;
+    font-size: 0.9em;
+    border: 2px solid transparent;
+}
+
+.filtro-btn:hover {
+    opacity: 0.85;
+}
+
+.filtro-btn.prioridade-urgente {
+    color: white;
+}
+
+.filtro-btn.prioridade-alta {
+    color: white;
+}
+
+.filtro-btn.prioridade-média {
+    color: white;
+}
+
+.filtro-ativo {
+    border-color: #333;
+    box-shadow: 0 0 0 1px #333;
+}
+
+/* Alerta de demanda parada */
+.linha-alerta {
+    background-color: #fff3cd;
+}
+
+.alerta-icon {
+    color: #856404;
+    font-size: 0.8em;
+    margin-left: 8px;
+    font-weight: bold;
+}
+
+/* Botoes inline */
+.btn-link {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-size: inherit;
+    font-family: inherit;
+}
+
+.btn-deletar {
+    color: #dc3545;
+}
+
+.btn-deletar:hover {
+    text-decoration: underline;
+}
+
+.btn-concluir {
+    color: #17a2b8;
+}
+
+.btn-concluir:hover {
+    text-decoration: underline;
+}
+
+.btn-reabrir {
+    color: #ffc107;
+}
+
+.btn-reabrir:hover {
+    text-decoration: underline;
 }

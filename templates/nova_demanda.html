@@ -22,6 +22,17 @@
     </div>
     <br>
 
+    <div>
+        <label>Prioridade:</label><br>
+        <select name="prioridade" required>
+            <option value="">-- Selecione --</option>
+            {% for p in prioridades %}
+                <option value="{{ p }}">{{ p }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <br>
+
     <button type="submit">Salvar</button>
     <a href="{{ url_for('index') }}"><button type="button">Cancelar</button></a>
 </form>

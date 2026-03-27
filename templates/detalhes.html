@@ -4,15 +4,30 @@
 <h2>Detalhes da Demanda #{{ demanda['id'] }}</h2>
 
 <div style="border:1px solid #ccc; padding:15px; margin-bottom:20px;">
-    <h3>{{ demanda['titulo'] }}</h3>
+    <h3>{{ demanda['titulo'] }}
+        <span class="badge prioridade-{{ demanda['prioridade']|lower }}">{{ demanda['prioridade'] }}</span>
+        {% if demanda['status'] == 'Concluída' %}
+            <span class="badge badge-concluida">Concluída</span>
+        {% endif %}
+    </h3>
     <p><strong>Descrição:</strong></p>
     <p>{{ demanda['descricao'] }}</p>
 
     <p><strong>Solicitante:</strong> {{ demanda['solicitante'] }}</p>
     <p><strong>Data de Criação:</strong> {{ demanda['data_criacao'] }}</p>
+    <p><strong>Status:</strong> {{ demanda['status'] }}</p>
 
     <br>
-    <a href="{{ url_for('editar', id=demanda['id']) }}"><button>Editar</button></a>
+    {% if demanda['status'] == 'Aberta' %}
+        <a href="{{ url_for('editar', id=demanda['id']) }}"><button>Editar</button></a>
+        <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}" style="display:inline;">
+            <button type="submit" style="background-color:#17a2b8;">Concluir</button>
+        </form>
+    {% else %}
+        <form method="POST" action="{{ url_for('reabrir', id=demanda['id']) }}" style="display:inline;">
+            <button type="submit" style="background-color:#ffc107; color:#333;">Reabrir</button>
+        </form>
+    {% endif %}
     <a href="{{ url_for('index') }}"><button type="button">Voltar</button></a>
 </div>
 
