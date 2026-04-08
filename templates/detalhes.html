@@ -1,66 +1,159 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h2>Detalhes da Demanda #{{ demanda['id'] }}</h2>
-
-<div class="detail-card">
-    <h3>
-        {{ demanda['titulo'] }}
-        <span class="badge prioridade-{{ demanda['prioridade']|priority_slug }}">{{ demanda['prioridade'] }}</span>
-        {% if demanda['status'] != 'Aberta' %}
-            <span class="badge badge-concluida">Concluida</span>
-        {% endif %}
-    </h3>
-
-    <p><strong>Descricao:</strong></p>
-    <p>{{ demanda['descricao'] }}</p>
-
-    <p><strong>Solicitante:</strong> {{ demanda['solicitante'] }}</p>
-    <p><strong>Data de Criacao:</strong> {{ demanda['data_criacao'] }}</p>
-    <p><strong>Status:</strong> {{ demanda['status'] }}</p>
-
-    <div class="form-actions">
-        {% if demanda['status'] == 'Aberta' %}
-            <a href="{{ url_for('editar', id=demanda['id']) }}" class="button-link">Editar</a>
-            <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}">
-                <button type="submit" class="info-button">Concluir</button>
-            </form>
-        {% else %}
-            <form method="POST" action="{{ url_for('reabrir', id=demanda['id']) }}">
-                <button type="submit" class="warning-button">Reabrir</button>
-            </form>
-        {% endif %}
-        <a href="{{ url_for(rota_voltar) }}" class="button-link secondary-link">Voltar</a>
-    </div>
+{% block hero %}
+<p class="hero-kicker">Detalhamento da demanda</p>
+<h1>{{ demanda['titulo'] }}</h1>
+<p class="hero-text">
+    Esta visao concentra contexto, prioridade, historico e proximas acoes para reduzir a troca de
+    tela durante acompanhamento e tomada de decisao.
+</p>
+<div class="hero-actions">
+    <a href="{{ url_for(rota_voltar) }}" class="button-primary">Voltar para a lista</a>
+    {% if demanda['status'] == 'Aberta' %}
+        <a href="{{ url_for('editar', id=demanda['id']) }}" class="button-secondary">Editar demanda</a>
+    {% endif %}
 </div>
+{% endblock %}
 
-<h3>Comentarios</h3>
+{% block content %}
+<section class="detail-layout">
+    <div class="detail-main">
+        <article class="panel-card">
+            <div class="section-header">
+                <div>
+                    <p class="section-kicker">Descricao</p>
+                    <h2>Contexto completo da demanda.</h2>
+                </div>
+                <div class="chip-row">
+                    <span class="mini-chip">#{{ demanda['id'] }}</span>
+                    <span class="badge priority-{{ demanda['prioridade']|priority_slug }}">{{ demanda['prioridade'] }}</span>
+                    <span class="status-chip {% if demanda['status'] == 'Aberta' %}is-open{% else %}is-done{% endif %}">
+                        {{ demanda['status'] }}
+                    </span>
+                </div>
+            </div>
 
-{% if comentarios %}
-    {% for comentario in comentarios %}
-        <div class="comment-card">
-            <p><strong>{{ comentario['autor'] }}</strong> em {{ comentario['data'] }}</p>
-            <p>{{ comentario['comentario'] }}</p>
-        </div>
-    {% endfor %}
-{% else %}
-    <p class="empty-state">Nenhum comentario registrado.</p>
-{% endif %}
+            <div class="rich-copy">
+                <p>{{ demanda['descricao'] }}</p>
+            </div>
+        </article>
 
-<h4>Adicionar Comentario</h4>
-<form method="POST" action="{{ url_for('adicionar_comentario', demanda_id=demanda['id']) }}" class="form-card">
-    <div>
-        <label for="autor">Seu nome:</label><br>
-        <input type="text" id="autor" name="autor" size="30" required>
+        <article class="panel-card">
+            <div class="section-header">
+                <div>
+                    <p class="section-kicker">Comentarios</p>
+                    <h2>Acompanhamento e historico da tratativa.</h2>
+                </div>
+                <p class="section-note">{{ comentarios_total }} registro(s)</p>
+            </div>
+
+            {% if comentarios %}
+                <div class="timeline">
+                    {% for comentario in comentarios %}
+                        <article class="timeline-card">
+                            <div class="timeline-card__marker"></div>
+                            <div class="timeline-card__content">
+                                <p class="timeline-card__meta">
+                                    <strong>{{ comentario['autor'] }}</strong>
+                                    <span>{{ comentario['data']|display_datetime }}</span>
+                                </p>
+                                <p>{{ comentario['comentario'] }}</p>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="empty-panel empty-panel--compact">
+                    <h3>Nenhum comentario registrado.</h3>
+                    <p>Use o formulario abaixo para documentar decisao, progresso ou impeditivos.</p>
+                </div>
+            {% endif %}
+        </article>
+
+        <article class="panel-card">
+            <div class="section-header">
+                <div>
+                    <p class="section-kicker">Novo comentario</p>
+                    <h2>Registre o proximo passo.</h2>
+                </div>
+                <p class="section-note">Comentarios claros melhoram continuidade entre dev e tech lead.</p>
+            </div>
+
+            <form method="POST" action="{{ url_for('adicionar_comentario', demanda_id=demanda['id']) }}" class="form-layout">
+                <div class="field-row">
+                    <div class="field-group">
+                        <label for="autor" class="field-label">Seu nome</label>
+                        <input type="text" id="autor" name="autor" placeholder="Quem esta registrando a atualizacao" required>
+                    </div>
+                </div>
+
+                <div class="field-group">
+                    <label for="comentario" class="field-label">Comentario</label>
+                    <textarea
+                        id="comentario"
+                        name="comentario"
+                        rows="5"
+                        placeholder="Descreva decisao, andamento, bloqueio ou proximo passo."
+                        required
+                    ></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="button-primary">Publicar comentario</button>
+                </div>
+            </form>
+        </article>
     </div>
 
-    <div>
-        <label for="comentario">Comentario:</label><br>
-        <textarea id="comentario" name="comentario" rows="4" cols="50" required></textarea>
-    </div>
+    <aside class="side-stack">
+        <article class="panel-card panel-card--soft">
+            <p class="section-kicker">Resumo operacional</p>
+            <h3>O que importa para decidir agora.</h3>
+            <dl class="summary-list">
+                <div>
+                    <dt>Solicitante</dt>
+                    <dd>{{ demanda['solicitante'] }}</dd>
+                </div>
+                <div>
+                    <dt>Criada em</dt>
+                    <dd>{{ demanda['data_criacao']|display_datetime }}</dd>
+                </div>
+                <div>
+                    <dt>Prioridade</dt>
+                    <dd><span class="badge priority-{{ demanda['prioridade']|priority_slug }}">{{ demanda['prioridade'] }}</span></dd>
+                </div>
+                <div>
+                    <dt>Status</dt>
+                    <dd>
+                        <span class="status-chip {% if demanda['status'] == 'Aberta' %}is-open{% else %}is-done{% endif %}">
+                            {{ demanda['status'] }}
+                        </span>
+                    </dd>
+                </div>
+            </dl>
+        </article>
 
-    <div class="form-actions">
-        <button type="submit">Enviar comentario</button>
-    </div>
-</form>
+        <article class="panel-card panel-card--soft">
+            <p class="section-kicker">Acoes</p>
+            <h3>Trate a demanda sem procurar comandos pela tela.</h3>
+            <div class="action-stack">
+                {% if demanda['status'] == 'Aberta' %}
+                    <a href="{{ url_for('editar', id=demanda['id']) }}" class="button-secondary button-block">Editar demanda</a>
+                    <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}">
+                        <button type="submit" class="button-soft button-block">Concluir demanda</button>
+                    </form>
+                {% else %}
+                    <form method="POST" action="{{ url_for('reabrir', id=demanda['id']) }}">
+                        <button type="submit" class="button-soft button-block">Reabrir demanda</button>
+                    </form>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('deletar', id=demanda['id']) }}" onsubmit="return confirm('Tem certeza que deseja deletar?');">
+                    <button type="submit" class="button-danger button-block">Deletar demanda</button>
+                </form>
+                <a href="{{ url_for(rota_voltar) }}" class="button-secondary button-block">Voltar para a lista</a>
+            </div>
+        </article>
+    </aside>
+</section>
 {% endblock %}

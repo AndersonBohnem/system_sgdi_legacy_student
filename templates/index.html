@@ -1,98 +1,191 @@
 {% extends "base.html" %}
 
+{% block hero %}
+<p class="hero-kicker">Painel de triagem</p>
+<h1>As demandas mais importantes aparecem primeiro.</h1>
+<p class="hero-text">
+    A interface foi reorganizada para acelerar a leitura do que esta parado, do que e mais critico
+    e de qual acao precisa acontecer agora.
+</p>
+<div class="hero-actions">
+    <a href="{{ url_for('nova_demanda') }}" class="button-primary">Registrar nova demanda</a>
+    <a href="{{ url_for('concluidas') }}" class="button-secondary">Ver historico concluido</a>
+</div>
+{% endblock %}
+
 {% block content %}
-<div class="page-header">
-    <div>
-        <h2>Demandas Abertas</h2>
+<section class="metrics-grid">
+    <article class="metric-card">
+        <p class="metric-card__label">Demandas visiveis</p>
+        <strong class="metric-card__value" data-summary-total>{{ resumo.total }}</strong>
+        <span class="metric-card__hint">Itens que estao no radar da equipe agora.</span>
+    </article>
+    <article class="metric-card metric-card--accent">
+        <p class="metric-card__label">Alta prioridade</p>
+        <strong class="metric-card__value" data-summary-high>{{ resumo.alta }}</strong>
+        <span class="metric-card__hint">Demandas que merecem resposta antes das demais.</span>
+    </article>
+    <article class="metric-card">
+        <p class="metric-card__label">Demandas paradas</p>
+        <strong class="metric-card__value" data-summary-alerts>{{ resumo.alertas }}</strong>
+        <span class="metric-card__hint">Itens com mais de 7 dias sem avancar.</span>
+    </article>
+    <article class="metric-card">
+        <p class="metric-card__label">Visao atual</p>
+        <strong class="metric-card__value metric-card__value--small" data-summary-view>{{ resumo.filtro_label }}</strong>
+        <span class="metric-card__hint" data-summary-order>{{ resumo.ordenacao_label }}</span>
+    </article>
+</section>
+
+<section data-demand-module>
+<section class="panel-card">
+    <div class="section-header">
+        <div>
+            <p class="section-kicker">Controles de leitura</p>
+            <h2>Filtre e reorganize sem perder contexto.</h2>
+        </div>
         {% if termo_busca %}
-            <p class="contexto-lista">Resultados para "<strong>{{ termo_busca }}</strong>".</p>
+            <p class="section-note">Resultados para "{{ termo_busca }}".</p>
         {% else %}
-            <p class="contexto-lista">Lista ordenada para destacar o que deve ser tratado primeiro.</p>
+            <p class="section-note">Prioridade continua sendo o criterio padrao de triagem.</p>
         {% endif %}
     </div>
-    <a href="{{ url_for('nova_demanda') }}" class="button-link">+ Nova Demanda</a>
-</div>
 
-<div class="toolbar">
-    <div class="filtros">
-        <span>Filtrar por prioridade:</span>
-        <a
-            href="{{ url_for(rota_listagem, prioridade=None, ordenacao=ordenacao_atual, q=termo_busca or None) }}"
-            class="filtro-btn {% if not filtro_atual %}filtro-ativo{% endif %}"
-        >
-            Todas
-        </a>
-        {% for prioridade in prioridades %}
+    <div class="toolbar-layout">
+        <div class="filter-cluster">
+            <span class="filter-cluster__label">Prioridade:</span>
             <a
-                href="{{ url_for(rota_listagem, prioridade=prioridade, ordenacao=ordenacao_atual, q=termo_busca or None) }}"
-                class="filtro-btn prioridade-{{ prioridade|priority_slug }} {% if filtro_atual == prioridade %}filtro-ativo{% endif %}"
+                href="{{ url_for(rota_listagem, prioridade=None, ordenacao=ordenacao_atual, q=termo_busca or None) }}"
+                class="filter-pill {% if not filtro_atual %}is-active{% endif %}"
+                data-priority-filter=""
+                aria-pressed="{% if not filtro_atual %}true{% else %}false{% endif %}"
             >
-                {{ prioridade }}
+                Todas
             </a>
-        {% endfor %}
-    </div>
-
-    <form method="GET" action="{{ url_for(rota_listagem) }}" class="sort-form">
-        {% if filtro_atual %}
-            <input type="hidden" name="prioridade" value="{{ filtro_atual }}">
-        {% endif %}
-        {% if termo_busca %}
-            <input type="hidden" name="q" value="{{ termo_busca }}">
-        {% endif %}
-        <label for="ordenacao">Ordenar por:</label>
-        <select name="ordenacao" id="ordenacao" onchange="this.form.submit()">
-            <option value="prioridade" {% if ordenacao_atual == 'prioridade' %}selected{% endif %}>Prioridade</option>
-            <option value="recentes" {% if ordenacao_atual == 'recentes' %}selected{% endif %}>Mais recentes</option>
-        </select>
-    </form>
-</div>
-
-<div class="table-wrapper">
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Prioridade</th>
-                <th>Titulo</th>
-                <th>Solicitante</th>
-                <th>Data</th>
-                <th>Acoes</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for demanda in demandas %}
-                <tr class="{% if demanda.alerta_parada %}linha-alerta{% endif %}">
-                    <td>{{ demanda['id'] }}</td>
-                    <td>
-                        <span class="badge prioridade-{{ demanda['prioridade']|priority_slug }}">
-                            {{ demanda['prioridade'] }}
-                        </span>
-                    </td>
-                    <td>
-                        {{ demanda['titulo'] }}
-                        {% if demanda.alerta_parada %}
-                            <span class="alerta-icon">&#9888; {{ demanda.dias_parada }}d</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ demanda['solicitante'] }}</td>
-                    <td>{{ demanda['data_criacao'] }}</td>
-                    <td class="acoes">
-                        <a href="{{ url_for('detalhes', id=demanda['id']) }}">Ver</a>
-                        <a href="{{ url_for('editar', id=demanda['id']) }}">Editar</a>
-                        <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}">
-                            <button type="submit" class="btn-link btn-concluir">Concluir</button>
-                        </form>
-                        <form method="POST" action="{{ url_for('deletar', id=demanda['id']) }}" onsubmit="return confirm('Tem certeza que deseja deletar?');">
-                            <button type="submit" class="btn-link btn-deletar">Deletar</button>
-                        </form>
-                    </td>
-                </tr>
+            {% for prioridade in prioridades %}
+                <a
+                    href="{{ url_for(rota_listagem, prioridade=prioridade, ordenacao=ordenacao_atual, q=termo_busca or None) }}"
+                    class="filter-pill priority-{{ prioridade|priority_slug }} {% if filtro_atual == prioridade %}is-active{% endif %}"
+                    data-priority-filter="{{ prioridade|priority_slug }}"
+                    aria-pressed="{% if filtro_atual == prioridade %}true{% else %}false{% endif %}"
+                >
+                    {{ prioridade }}
+                </a>
             {% endfor %}
-        </tbody>
-    </table>
+        </div>
+
+        <form method="GET" action="{{ url_for(rota_listagem) }}" class="sort-form">
+            {% if filtro_atual %}
+                <input type="hidden" name="prioridade" value="{{ filtro_atual }}">
+            {% endif %}
+            {% if termo_busca %}
+                <input type="hidden" name="q" value="{{ termo_busca }}">
+            {% endif %}
+
+            <label for="ordenacao" class="field-label">Ordenar por</label>
+            <select name="ordenacao" id="ordenacao" data-sort-control>
+                <option value="prioridade" {% if ordenacao_atual == 'prioridade' %}selected{% endif %}>Prioridade</option>
+                <option value="recentes" {% if ordenacao_atual == 'recentes' %}selected{% endif %}>Mais recentes</option>
+            </select>
+        </form>
+    </div>
+</section>
+
+<section
+    class="demand-list"
+    data-demand-list
+    data-current-filter="{{ (filtro_atual|priority_slug) if filtro_atual else '' }}"
+    data-current-order="{{ ordenacao_atual }}"
+    data-batch-size="6"
+>
+    {% if demandas %}
+        {% for demanda in demandas %}
+            <article
+                class="demand-card priority-{{ demanda['prioridade']|priority_slug }} {% if demanda.alerta_parada %}is-stalled{% endif %}"
+                data-demand-card
+                data-priority="{{ demanda['prioridade']|priority_slug }}"
+                data-created="{{ demanda['data_criacao'] }}"
+                data-alert="{% if demanda.alerta_parada %}true{% else %}false{% endif %}"
+            >
+                <div class="demand-card__signal"></div>
+
+                <div class="demand-card__body">
+                    <div class="demand-card__header">
+                        <div class="demand-card__headline">
+                            <div class="chip-row">
+                                <span class="mini-chip">#{{ demanda['id'] }}</span>
+                                <span class="badge priority-{{ demanda['prioridade']|priority_slug }}">{{ demanda['prioridade'] }}</span>
+                                <span class="status-chip is-open">Aberta</span>
+                                {% if demanda.alerta_parada %}
+                                    <span class="badge badge-warning">Parada ha {{ demanda.dias_parada }} dias</span>
+                                {% endif %}
+                            </div>
+
+                            <h3>
+                                <a href="{{ url_for('detalhes', id=demanda['id']) }}">{{ demanda['titulo'] }}</a>
+                            </h3>
+
+                            <p class="demand-card__description">
+                                {{ demanda['descricao'][:180] }}{% if demanda['descricao']|length > 180 %}...{% endif %}
+                            </p>
+                        </div>
+
+                        <div class="demand-card__actions">
+                            <a href="{{ url_for('detalhes', id=demanda['id']) }}" class="button-secondary button-small">Ver detalhes</a>
+                            <a href="{{ url_for('editar', id=demanda['id']) }}" class="button-secondary button-small">Editar</a>
+                            <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}">
+                                <button type="submit" class="button-soft button-small">Concluir</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('deletar', id=demanda['id']) }}" onsubmit="return confirm('Tem certeza que deseja deletar?');">
+                                <button type="submit" class="button-danger button-small">Deletar</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <dl class="meta-grid">
+                        <div>
+                            <dt>Solicitante</dt>
+                            <dd>{{ demanda['solicitante'] }}</dd>
+                        </div>
+                        <div>
+                            <dt>Criada em</dt>
+                            <dd>{{ demanda['data_criacao']|display_datetime }}</dd>
+                        </div>
+                        <div>
+                            <dt>Leitura recomendada</dt>
+                            <dd>
+                                {% if demanda['prioridade']|priority_slug == 'alta' %}
+                                    Tratar antes das demais.
+                                {% elif demanda['prioridade']|priority_slug == 'media' %}
+                                    Planejar ainda nesta rodada.
+                                {% else %}
+                                    Monitorar e encaixar no fluxo.
+                                {% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </article>
+        {% endfor %}
+    {% else %}
+        <div class="empty-panel">
+            <p class="section-kicker">Sem resultados</p>
+            <h3>Nenhuma demanda encontrada nessa combinacao.</h3>
+            <p>Limpe o filtro ou registre uma nova demanda para manter o fluxo atualizado.</p>
+            <a href="{{ url_for('index') }}" class="button-primary">Voltar para a visao principal</a>
+        </div>
+    {% endif %}
+</section>
+
+<div class="list-pagination" data-load-more-area hidden>
+    <p class="list-pagination__status" data-load-more-status></p>
+    <button type="button" class="button-secondary" data-load-more>Ver mais demandas</button>
 </div>
 
-{% if not demandas %}
-    <p class="empty-state">Nenhuma demanda encontrada.</p>
-{% endif %}
+<div class="empty-panel" data-empty-state hidden>
+    <p class="section-kicker">Sem resultados</p>
+    <h3>Nenhuma demanda encontrada nessa combinacao.</h3>
+    <p>Limpe o filtro atual ou altere a ordenacao para revisar os demais itens.</p>
+</div>
+</section>
 {% endblock %}

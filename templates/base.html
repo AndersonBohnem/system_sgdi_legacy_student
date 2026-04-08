@@ -7,43 +7,94 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="header">
-        <div class="header-inner">
-            <h1>SGDI</h1>
-            <div class="menu">
-                <a href="{{ url_for('index') }}">Inicio</a>
-                <a href="{{ url_for('concluidas') }}">Concluidas</a>
-                <a href="{{ url_for('nova_demanda') }}">Nova Demanda</a>
-                <form action="{{ url_for('buscar') }}" method="GET" class="search-form">
-                    {% if filtro_atual %}
-                        <input type="hidden" name="prioridade" value="{{ filtro_atual }}">
-                    {% endif %}
-                    {% if ordenacao_atual %}
-                        <input type="hidden" name="ordenacao" value="{{ ordenacao_atual }}">
-                    {% endif %}
-                    <input type="text" name="q" placeholder="Buscar nas abertas" value="{{ termo_busca or '' }}">
-                    <button type="submit">Buscar</button>
-                </form>
+    <div class="page-backdrop"></div>
+
+    <div class="page-shell">
+        <header class="app-header">
+            <div class="app-header__bar">
+                <a href="{{ url_for('index') }}" class="brand-block">
+                    <span class="brand-mark">SGDI</span>
+                    <div>
+                        <p class="brand-kicker">Operacao interna</p>
+                        <h2>Demandas organizadas por contexto e prioridade</h2>
+                    </div>
+                </a>
+
+                <nav class="top-nav" aria-label="Navegacao principal">
+                    <a
+                        href="{{ url_for('index') }}"
+                        class="top-nav__link {% if request.endpoint in ['index', 'buscar'] %}is-active{% endif %}"
+                    >
+                        Abertas
+                    </a>
+                    <a
+                        href="{{ url_for('concluidas') }}"
+                        class="top-nav__link {% if request.endpoint == 'concluidas' %}is-active{% endif %}"
+                    >
+                        Concluidas
+                    </a>
+                    <a
+                        href="{{ url_for('nova_demanda') }}"
+                        class="top-nav__link {% if request.endpoint == 'nova_demanda' %}is-active{% endif %}"
+                    >
+                        Nova demanda
+                    </a>
+                </nav>
             </div>
-        </div>
-    </div>
 
-    {% with messages = get_flashed_messages() %}
-        {% if messages %}
-            <div class="alerts">
-                {% for message in messages %}
-                    <div class="alert">{{ message }}</div>
-                {% endfor %}
+            <div class="hero-layout">
+                <div class="hero-copy">
+                    {% block hero %}{% endblock %}
+                </div>
+
+                <aside class="search-panel">
+                    <p class="panel-kicker">Busca rapida</p>
+                    <h3>Encontre demandas abertas sem perder o contexto.</h3>
+                    <p class="panel-text">
+                        A busca continua respeitando filtros e ordenacao para manter a triagem coerente.
+                    </p>
+
+                    <form action="{{ url_for('buscar') }}" method="GET" class="search-form">
+                        {% if filtro_atual|default('') %}
+                            <input type="hidden" name="prioridade" value="{{ filtro_atual }}">
+                        {% endif %}
+                        {% if ordenacao_atual|default('') %}
+                            <input type="hidden" name="ordenacao" value="{{ ordenacao_atual }}">
+                        {% endif %}
+
+                        <label for="header-search" class="field-label">Buscar em demandas abertas</label>
+                        <input
+                            type="text"
+                            id="header-search"
+                            name="q"
+                            placeholder="Titulo, descricao ou solicitante"
+                            value="{{ termo_busca|default('') }}"
+                        >
+                        <button type="submit" class="button-primary button-block">Buscar agora</button>
+                    </form>
+                </aside>
             </div>
-        {% endif %}
-    {% endwith %}
+        </header>
 
-    <div class="container">
-        {% block content %}{% endblock %}
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <section class="alerts">
+                    {% for message in messages %}
+                        <div class="alert-card">{{ message }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        <main class="content-shell">
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="app-footer">
+            <p>SGDI v1.3 | Interface revisada para apoiar triagem, execucao e acompanhamento.</p>
+        </footer>
     </div>
 
-    <div class="footer">
-        <p>SGDI v1.2 - 2026</p>
-    </div>
+    <script src="{{ url_for('static', filename='ui.js') }}"></script>
 </body>
 </html>

@@ -21,6 +21,10 @@ ORDENACOES = {
     "prioridade": f"{PRIORIDADE_ORDEM_SQL}, data_criacao DESC",
     "recentes": "data_criacao DESC",
 }
+ORDENACAO_LABELS = {
+    "prioridade": "Prioridade primeiro",
+    "recentes": "Mais recentes primeiro",
+}
 DIAS_ALERTA_PARADA = 7
 
 initialize_database()
@@ -33,6 +37,14 @@ def get_db():
 @app.template_filter("priority_slug")
 def priority_slug(value):
     return PRIORIDADE_SLUGS.get(value, "neutra")
+
+
+@app.template_filter("display_datetime")
+def display_datetime(value):
+    try:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y as %H:%M")
+    except (TypeError, ValueError):
+        return value
 
 
 def normalize_priority(prioridade):
@@ -70,10 +82,18 @@ def build_demand_context(status, filtro_prioridade="", termo_busca="", ordenacao
     finally:
         conn.close()
 
+    demandas_enriquecidas = enrich_demands(demandas)
+
     return {
-        "demandas": enrich_demands(demandas),
+        "demandas": demandas_enriquecidas,
         "filtro_atual": filtro_normalizado,
         "ordenacao_atual": ordenacao_normalizada,
+        "resumo": build_summary(
+            demandas_enriquecidas,
+            filtro_normalizado,
+            ordenacao_normalizada,
+            status,
+        ),
         "prioridades": PRIORIDADES,
         "termo_busca": termo_busca,
     }
@@ -98,6 +118,26 @@ def enrich_demands(demandas):
         demandas_com_alerta.append(demanda_dict)
 
     return demandas_com_alerta
+
+
+def build_summary(demandas, filtro_prioridade, ordenacao, status):
+    contagem_por_prioridade = {prioridade: 0 for prioridade in PRIORIDADES}
+
+    for demanda in demandas:
+        prioridade = demanda.get("prioridade")
+        if prioridade in contagem_por_prioridade:
+            contagem_por_prioridade[prioridade] += 1
+
+    return {
+        "total": len(demandas),
+        "alta": contagem_por_prioridade[PRIORIDADES[0]],
+        "media": contagem_por_prioridade[PRIORIDADES[1]],
+        "baixa": contagem_por_prioridade[PRIORIDADES[2]],
+        "alertas": sum(1 for demanda in demandas if demanda.get("alerta_parada")),
+        "filtro_label": filtro_prioridade or "Todas as prioridades",
+        "ordenacao_label": ORDENACAO_LABELS[ordenacao],
+        "status_label": "abertas" if status == STATUS_ABERTA else "concluidas",
+    }
 
 
 @app.route("/")
@@ -349,6 +389,7 @@ def detalhes(id):
         "detalhes.html",
         demanda=demanda,
         comentarios=comentarios,
+        comentarios_total=len(comentarios),
         rota_voltar=rota_voltar,
     )
 
