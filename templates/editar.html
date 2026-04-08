@@ -3,50 +3,47 @@
 {% block content %}
 <h2>Editar Demanda</h2>
 
-<form method="POST" action="{{ url_for('editar', id=demanda['id']) }}">
+<form method="POST" action="{{ url_for('editar', id=demanda['id']) }}" class="form-card">
     <div>
-        <label>Seu nome (para validação de permissão):</label><br>
-        <input type="text" name="nome_editor" required placeholder="Digite seu nome">
+        <label for="nome_editor">Seu nome (para validacao de permissao):</label><br>
+        <input type="text" id="nome_editor" name="nome_editor" required placeholder="Digite seu nome">
     </div>
-    <br>
 
     <div>
-        <label>Título:</label><br>
-        <input type="text" name="titulo" value="{{ demanda['titulo'] }}" size="50" required>
+        <label for="titulo">Titulo:</label><br>
+        <input type="text" id="titulo" name="titulo" value="{{ demanda['titulo'] }}" size="50" required>
     </div>
-    <br>
 
     <div>
-        <label>Descrição:</label><br>
-        <textarea name="descricao" rows="5" cols="50" required>{{ demanda['descricao'] }}</textarea>
+        <label for="descricao">Descricao:</label><br>
+        <textarea id="descricao" name="descricao" rows="5" cols="50" required>{{ demanda['descricao'] }}</textarea>
     </div>
-    <br>
 
     <div>
-        <label>Solicitante:</label><br>
-        <input type="text" name="solicitante" value="{{ demanda['solicitante'] }}" required>
+        <label for="solicitante">Solicitante:</label><br>
+        <input type="text" id="solicitante" name="solicitante" value="{{ demanda['solicitante'] }}" required>
     </div>
-    <br>
 
     <div>
-        <label>Prioridade:</label>
+        <label for="prioridade">Prioridade:</label>
         <small>(apenas o criador <strong>{{ demanda['solicitante'] }}</strong> pode alterar)</small><br>
-        <select name="prioridade" required>
-            {% for p in prioridades %}
-                <option value="{{ p }}" {% if demanda['prioridade'] == p %}selected{% endif %}>{{ p }}</option>
+        <select id="prioridade" name="prioridade" required>
+            {% for prioridade in prioridades %}
+                <option value="{{ prioridade }}" {% if demanda['prioridade'] == prioridade %}selected{% endif %}>
+                    {{ prioridade }}
+                </option>
             {% endfor %}
         </select>
     </div>
-    <br>
 
     <div>
-        <label>Data de Criação:</label><br>
+        <label>Data de Criacao:</label><br>
         <input type="text" value="{{ demanda['data_criacao'] }}" disabled>
     </div>
-    <br>
 
-    <button type="submit">Atualizar</button>
-    <a href="{{ url_for('index') }}"><button type="button">Cancelar</button></a>
+    <div class="form-actions">
+        <button type="submit">Atualizar</button>
+        <a href="{{ url_for('detalhes', id=demanda['id']) }}" class="button-link secondary-link">Cancelar</a>
+    </div>
 </form>
-
 {% endblock %}

@@ -1,31 +1,40 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
-    <title>SGDI - Sistema de Gestão de Demandas</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SGDI - Sistema de Gestao de Demandas</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        body { margin: 0; }
-    </style>
 </head>
 <body>
     <div class="header">
-        <h1>SGDI</h1>
-        <div class="menu">
-            <a href="{{ url_for('index') }}">Início</a>
-            <a href="{{ url_for('concluidas') }}">Concluídas</a>
-            <a href="{{ url_for('nova_demanda') }}">Nova Demanda</a>
-            <form action="{{ url_for('buscar') }}" method="GET" style="display:inline;">
-                <input type="text" name="q" placeholder="Buscar">
-                <button type="submit">Buscar</button>
-            </form>
+        <div class="header-inner">
+            <h1>SGDI</h1>
+            <div class="menu">
+                <a href="{{ url_for('index') }}">Inicio</a>
+                <a href="{{ url_for('concluidas') }}">Concluidas</a>
+                <a href="{{ url_for('nova_demanda') }}">Nova Demanda</a>
+                <form action="{{ url_for('buscar') }}" method="GET" class="search-form">
+                    {% if filtro_atual %}
+                        <input type="hidden" name="prioridade" value="{{ filtro_atual }}">
+                    {% endif %}
+                    {% if ordenacao_atual %}
+                        <input type="hidden" name="ordenacao" value="{{ ordenacao_atual }}">
+                    {% endif %}
+                    <input type="text" name="q" placeholder="Buscar nas abertas" value="{{ termo_busca or '' }}">
+                    <button type="submit">Buscar</button>
+                </form>
+            </div>
         </div>
     </div>
 
     {% with messages = get_flashed_messages() %}
         {% if messages %}
-            {% for message in messages %}
-                <div class="alert">{{ message }}</div>
-            {% endfor %}
+            <div class="alerts">
+                {% for message in messages %}
+                    <div class="alert">{{ message }}</div>
+                {% endfor %}
+            </div>
         {% endif %}
     {% endwith %}
 
@@ -34,7 +43,7 @@
     </div>
 
     <div class="footer">
-        <p>SGDI v1.1 - 2024</p>
+        <p>SGDI v1.2 - 2026</p>
     </div>
 </body>
 </html>

@@ -1,52 +1,85 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Demandas Concluídas</h2>
+<div class="page-header">
+    <div>
+        <h2>Demandas Concluidas</h2>
+        <p class="contexto-lista">Historico com filtro e ordenacao por prioridade.</p>
+    </div>
+    <a href="{{ url_for('index') }}" class="button-link secondary-link">Voltar para abertas</a>
+</div>
 
-<table border="1" cellpadding="10" cellspacing="0" width="100%">
-    <thead>
-        <tr bgcolor="#cccccc">
-            <th>ID</th>
-            <th>Prioridade</th>
-            <th>Título</th>
-            <th>Solicitante</th>
-            <th>Data</th>
-            <th>Ações</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for demanda in demandas %}
-        <tr>
-            <td>{{ demanda['id'] }}</td>
-            <td>
-                <span class="badge prioridade-{{ demanda['prioridade']|lower }}">
-                    {{ demanda['prioridade'] }}
-                </span>
-            </td>
-            <td>{{ demanda['titulo'] }}</td>
-            <td>{{ demanda['solicitante'] }}</td>
-            <td>{{ demanda['data_criacao'] }}</td>
-            <td>
-                <a href="{{ url_for('detalhes', id=demanda['id']) }}">Ver</a>
-                |
-                <form method="POST" action="{{ url_for('reabrir', id=demanda['id']) }}" style="display:inline;">
-                    <button type="submit" class="btn-link btn-reabrir">Reabrir</button>
-                </form>
-                |
-                <form method="POST" action="{{ url_for('deletar', id=demanda['id']) }}" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja deletar?');">
-                    <button type="submit" class="btn-link btn-deletar">Deletar</button>
-                </form>
-            </td>
-        </tr>
+<div class="toolbar">
+    <div class="filtros">
+        <span>Filtrar por prioridade:</span>
+        <a
+            href="{{ url_for('concluidas', prioridade=None, ordenacao=ordenacao_atual) }}"
+            class="filtro-btn {% if not filtro_atual %}filtro-ativo{% endif %}"
+        >
+            Todas
+        </a>
+        {% for prioridade in prioridades %}
+            <a
+                href="{{ url_for('concluidas', prioridade=prioridade, ordenacao=ordenacao_atual) }}"
+                class="filtro-btn prioridade-{{ prioridade|priority_slug }} {% if filtro_atual == prioridade %}filtro-ativo{% endif %}"
+            >
+                {{ prioridade }}
+            </a>
         {% endfor %}
-    </tbody>
-</table>
+    </div>
+
+    <form method="GET" action="{{ url_for('concluidas') }}" class="sort-form">
+        {% if filtro_atual %}
+            <input type="hidden" name="prioridade" value="{{ filtro_atual }}">
+        {% endif %}
+        <label for="ordenacao-concluidas">Ordenar por:</label>
+        <select name="ordenacao" id="ordenacao-concluidas" onchange="this.form.submit()">
+            <option value="prioridade" {% if ordenacao_atual == 'prioridade' %}selected{% endif %}>Prioridade</option>
+            <option value="recentes" {% if ordenacao_atual == 'recentes' %}selected{% endif %}>Mais recentes</option>
+        </select>
+    </form>
+</div>
+
+<div class="table-wrapper">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Prioridade</th>
+                <th>Titulo</th>
+                <th>Solicitante</th>
+                <th>Data</th>
+                <th>Acoes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for demanda in demandas %}
+                <tr>
+                    <td>{{ demanda['id'] }}</td>
+                    <td>
+                        <span class="badge prioridade-{{ demanda['prioridade']|priority_slug }}">
+                            {{ demanda['prioridade'] }}
+                        </span>
+                    </td>
+                    <td>{{ demanda['titulo'] }}</td>
+                    <td>{{ demanda['solicitante'] }}</td>
+                    <td>{{ demanda['data_criacao'] }}</td>
+                    <td class="acoes">
+                        <a href="{{ url_for('detalhes', id=demanda['id']) }}">Ver</a>
+                        <form method="POST" action="{{ url_for('reabrir', id=demanda['id']) }}">
+                            <button type="submit" class="btn-link btn-reabrir">Reabrir</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('deletar', id=demanda['id']) }}" onsubmit="return confirm('Tem certeza que deseja deletar?');">
+                            <button type="submit" class="btn-link btn-deletar">Deletar</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
 {% if not demandas %}
-<p style="text-align:center; color:#888; margin-top:20px;">Nenhuma demanda concluída.</p>
+    <p class="empty-state">Nenhuma demanda concluida encontrada.</p>
 {% endif %}
-
-<br>
-<a href="{{ url_for('index') }}"><button type="button">Voltar</button></a>
-
 {% endblock %}

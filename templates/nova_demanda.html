@@ -3,38 +3,37 @@
 {% block content %}
 <h2>Nova Demanda</h2>
 
-<form method="POST" action="{{ url_for('nova_demanda') }}">
+<form method="POST" action="{{ url_for('nova_demanda') }}" class="form-card">
     <div>
-        <label>Título:</label><br>
-        <input type="text" name="titulo" size="50" required>
+        <label for="titulo">Titulo:</label><br>
+        <input type="text" id="titulo" name="titulo" size="50" value="{{ form_data.titulo }}" required>
     </div>
-    <br>
 
     <div>
-        <label>Descrição:</label><br>
-        <textarea name="descricao" rows="5" cols="50" required></textarea>
+        <label for="descricao">Descricao:</label><br>
+        <textarea id="descricao" name="descricao" rows="5" cols="50" required>{{ form_data.descricao }}</textarea>
     </div>
-    <br>
 
     <div>
-        <label>Solicitante:</label><br>
-        <input type="text" name="solicitante" required>
+        <label for="solicitante">Solicitante:</label><br>
+        <input type="text" id="solicitante" name="solicitante" value="{{ form_data.solicitante }}" required>
     </div>
-    <br>
 
     <div>
-        <label>Prioridade:</label><br>
-        <select name="prioridade" required>
+        <label for="prioridade">Prioridade:</label><br>
+        <select id="prioridade" name="prioridade" required>
             <option value="">-- Selecione --</option>
-            {% for p in prioridades %}
-                <option value="{{ p }}">{{ p }}</option>
+            {% for prioridade in prioridades %}
+                <option value="{{ prioridade }}" {% if form_data.prioridade == prioridade %}selected{% endif %}>
+                    {{ prioridade }}
+                </option>
             {% endfor %}
         </select>
     </div>
-    <br>
 
-    <button type="submit">Salvar</button>
-    <a href="{{ url_for('index') }}"><button type="button">Cancelar</button></a>
+    <div class="form-actions">
+        <button type="submit">Salvar</button>
+        <a href="{{ url_for('index') }}" class="button-link secondary-link">Cancelar</a>
+    </div>
 </form>
-
 {% endblock %}

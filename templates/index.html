@@ -1,67 +1,98 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Demandas Abertas</h2>
-
-<div class="filtros">
-    <span>Filtrar por prioridade:</span>
-    <a href="{{ url_for('index') }}" class="filtro-btn {% if not filtro_atual %}filtro-ativo{% endif %}">Todas</a>
-    {% for p in prioridades %}
-        <a href="{{ url_for('index', prioridade=p) }}" class="filtro-btn prioridade-{{ p|lower }} {% if filtro_atual == p %}filtro-ativo{% endif %}">{{ p }}</a>
-    {% endfor %}
+<div class="page-header">
+    <div>
+        <h2>Demandas Abertas</h2>
+        {% if termo_busca %}
+            <p class="contexto-lista">Resultados para "<strong>{{ termo_busca }}</strong>".</p>
+        {% else %}
+            <p class="contexto-lista">Lista ordenada para destacar o que deve ser tratado primeiro.</p>
+        {% endif %}
+    </div>
+    <a href="{{ url_for('nova_demanda') }}" class="button-link">+ Nova Demanda</a>
 </div>
 
-<table border="1" cellpadding="10" cellspacing="0" width="100%">
-    <thead>
-        <tr bgcolor="#cccccc">
-            <th>ID</th>
-            <th>Prioridade</th>
-            <th>Título</th>
-            <th>Solicitante</th>
-            <th>Data</th>
-            <th>Ações</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for demanda in demandas %}
-        <tr class="{% if demanda.alerta_parada %}linha-alerta{% endif %}">
-            <td>{{ demanda['id'] }}</td>
-            <td>
-                <span class="badge prioridade-{{ demanda['prioridade']|lower }}">
-                    {{ demanda['prioridade'] }}
-                </span>
-            </td>
-            <td>
-                {{ demanda['titulo'] }}
-                {% if demanda.alerta_parada %}
-                    <span class="alerta-icon">&#9888; {{ demanda.dias_parada }}d</span>
-                {% endif %}
-            </td>
-            <td>{{ demanda['solicitante'] }}</td>
-            <td>{{ demanda['data_criacao'] }}</td>
-            <td>
-                <a href="{{ url_for('detalhes', id=demanda['id']) }}">Ver</a>
-                |
-                <a href="{{ url_for('editar', id=demanda['id']) }}">Editar</a>
-                |
-                <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}" style="display:inline;">
-                    <button type="submit" class="btn-link btn-concluir">Concluir</button>
-                </form>
-                |
-                <form method="POST" action="{{ url_for('deletar', id=demanda['id']) }}" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja deletar?');">
-                    <button type="submit" class="btn-link btn-deletar">Deletar</button>
-                </form>
-            </td>
-        </tr>
+<div class="toolbar">
+    <div class="filtros">
+        <span>Filtrar por prioridade:</span>
+        <a
+            href="{{ url_for(rota_listagem, prioridade=None, ordenacao=ordenacao_atual, q=termo_busca or None) }}"
+            class="filtro-btn {% if not filtro_atual %}filtro-ativo{% endif %}"
+        >
+            Todas
+        </a>
+        {% for prioridade in prioridades %}
+            <a
+                href="{{ url_for(rota_listagem, prioridade=prioridade, ordenacao=ordenacao_atual, q=termo_busca or None) }}"
+                class="filtro-btn prioridade-{{ prioridade|priority_slug }} {% if filtro_atual == prioridade %}filtro-ativo{% endif %}"
+            >
+                {{ prioridade }}
+            </a>
         {% endfor %}
-    </tbody>
-</table>
+    </div>
+
+    <form method="GET" action="{{ url_for(rota_listagem) }}" class="sort-form">
+        {% if filtro_atual %}
+            <input type="hidden" name="prioridade" value="{{ filtro_atual }}">
+        {% endif %}
+        {% if termo_busca %}
+            <input type="hidden" name="q" value="{{ termo_busca }}">
+        {% endif %}
+        <label for="ordenacao">Ordenar por:</label>
+        <select name="ordenacao" id="ordenacao" onchange="this.form.submit()">
+            <option value="prioridade" {% if ordenacao_atual == 'prioridade' %}selected{% endif %}>Prioridade</option>
+            <option value="recentes" {% if ordenacao_atual == 'recentes' %}selected{% endif %}>Mais recentes</option>
+        </select>
+    </form>
+</div>
+
+<div class="table-wrapper">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Prioridade</th>
+                <th>Titulo</th>
+                <th>Solicitante</th>
+                <th>Data</th>
+                <th>Acoes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for demanda in demandas %}
+                <tr class="{% if demanda.alerta_parada %}linha-alerta{% endif %}">
+                    <td>{{ demanda['id'] }}</td>
+                    <td>
+                        <span class="badge prioridade-{{ demanda['prioridade']|priority_slug }}">
+                            {{ demanda['prioridade'] }}
+                        </span>
+                    </td>
+                    <td>
+                        {{ demanda['titulo'] }}
+                        {% if demanda.alerta_parada %}
+                            <span class="alerta-icon">&#9888; {{ demanda.dias_parada }}d</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ demanda['solicitante'] }}</td>
+                    <td>{{ demanda['data_criacao'] }}</td>
+                    <td class="acoes">
+                        <a href="{{ url_for('detalhes', id=demanda['id']) }}">Ver</a>
+                        <a href="{{ url_for('editar', id=demanda['id']) }}">Editar</a>
+                        <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}">
+                            <button type="submit" class="btn-link btn-concluir">Concluir</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('deletar', id=demanda['id']) }}" onsubmit="return confirm('Tem certeza que deseja deletar?');">
+                            <button type="submit" class="btn-link btn-deletar">Deletar</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
 {% if not demandas %}
-<p style="text-align:center; color:#888; margin-top:20px;">Nenhuma demanda encontrada.</p>
+    <p class="empty-state">Nenhuma demanda encontrada.</p>
 {% endif %}
-
-<br><br>
-<a href="{{ url_for('nova_demanda') }}"><button>+ Nova Demanda</button></a>
-
 {% endblock %}

@@ -3,56 +3,64 @@
 {% block content %}
 <h2>Detalhes da Demanda #{{ demanda['id'] }}</h2>
 
-<div style="border:1px solid #ccc; padding:15px; margin-bottom:20px;">
-    <h3>{{ demanda['titulo'] }}
-        <span class="badge prioridade-{{ demanda['prioridade']|lower }}">{{ demanda['prioridade'] }}</span>
-        {% if demanda['status'] == 'Concluída' %}
-            <span class="badge badge-concluida">Concluída</span>
+<div class="detail-card">
+    <h3>
+        {{ demanda['titulo'] }}
+        <span class="badge prioridade-{{ demanda['prioridade']|priority_slug }}">{{ demanda['prioridade'] }}</span>
+        {% if demanda['status'] != 'Aberta' %}
+            <span class="badge badge-concluida">Concluida</span>
         {% endif %}
     </h3>
-    <p><strong>Descrição:</strong></p>
+
+    <p><strong>Descricao:</strong></p>
     <p>{{ demanda['descricao'] }}</p>
 
     <p><strong>Solicitante:</strong> {{ demanda['solicitante'] }}</p>
-    <p><strong>Data de Criação:</strong> {{ demanda['data_criacao'] }}</p>
+    <p><strong>Data de Criacao:</strong> {{ demanda['data_criacao'] }}</p>
     <p><strong>Status:</strong> {{ demanda['status'] }}</p>
 
-    <br>
-    {% if demanda['status'] == 'Aberta' %}
-        <a href="{{ url_for('editar', id=demanda['id']) }}"><button>Editar</button></a>
-        <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}" style="display:inline;">
-            <button type="submit" style="background-color:#17a2b8;">Concluir</button>
-        </form>
-    {% else %}
-        <form method="POST" action="{{ url_for('reabrir', id=demanda['id']) }}" style="display:inline;">
-            <button type="submit" style="background-color:#ffc107; color:#333;">Reabrir</button>
-        </form>
-    {% endif %}
-    <a href="{{ url_for('index') }}"><button type="button">Voltar</button></a>
+    <div class="form-actions">
+        {% if demanda['status'] == 'Aberta' %}
+            <a href="{{ url_for('editar', id=demanda['id']) }}" class="button-link">Editar</a>
+            <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}">
+                <button type="submit" class="info-button">Concluir</button>
+            </form>
+        {% else %}
+            <form method="POST" action="{{ url_for('reabrir', id=demanda['id']) }}">
+                <button type="submit" class="warning-button">Reabrir</button>
+            </form>
+        {% endif %}
+        <a href="{{ url_for(rota_voltar) }}" class="button-link secondary-link">Voltar</a>
+    </div>
 </div>
 
-<h3>Comentários</h3>
+<h3>Comentarios</h3>
 
-{% for comentario in comentarios %}
-<div style="background:#f0f0f0; padding:10px; margin:10px 0;">
-    <p><strong>{{ comentario['autor'] }}</strong> em {{ comentario['data'] }}</p>
-    <p>{{ comentario['comentario'] }}</p>
-</div>
-{% endfor %}
+{% if comentarios %}
+    {% for comentario in comentarios %}
+        <div class="comment-card">
+            <p><strong>{{ comentario['autor'] }}</strong> em {{ comentario['data'] }}</p>
+            <p>{{ comentario['comentario'] }}</p>
+        </div>
+    {% endfor %}
+{% else %}
+    <p class="empty-state">Nenhum comentario registrado.</p>
+{% endif %}
 
-<h4>Adicionar Comentário</h4>
-<form method="POST" action="{{ url_for('adicionar_comentario', demanda_id=demanda['id']) }}">
+<h4>Adicionar Comentario</h4>
+<form method="POST" action="{{ url_for('adicionar_comentario', demanda_id=demanda['id']) }}" class="form-card">
     <div>
-        <label>Seu nome:</label><br>
-        <input type="text" name="autor" size="30" required>
+        <label for="autor">Seu nome:</label><br>
+        <input type="text" id="autor" name="autor" size="30" required>
     </div>
-    <br>
+
     <div>
-        <label>Comentário:</label><br>
-        <textarea name="comentario" rows="4" cols="50" required></textarea>
+        <label for="comentario">Comentario:</label><br>
+        <textarea id="comentario" name="comentario" rows="4" cols="50" required></textarea>
     </div>
-    <br>
-    <button type="submit">Enviar Comentário</button>
+
+    <div class="form-actions">
+        <button type="submit">Enviar comentario</button>
+    </div>
 </form>
-
 {% endblock %}
