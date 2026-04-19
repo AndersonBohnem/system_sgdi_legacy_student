@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Usuários</h1>
+        <p class="page-header__sub">Visibilidade completa por solicitante — volume, status e criticidade.</p>
+    </div>
+    <div class="page-header__actions">
+        <a href="{{ url_for('index') }}" class="btn btn--primary">Ver abertas</a>
+        <a href="{{ url_for('nova_demanda') }}" class="btn btn--secondary">Nova demanda</a>
+    </div>
+</div>
+
+<div class="stats-bar">
+    <div class="stat-card">
+        <p class="stat-card__label">Usuários</p>
+        <strong class="stat-card__value">{{ usuarios_stats|length }}</strong>
+        <span class="stat-card__hint">Solicitantes ativos no sistema.</span>
+    </div>
+    <div class="stat-card stat-card--accent">
+        <p class="stat-card__label">Demandas abertas</p>
+        <strong class="stat-card__value">{{ usuarios_stats|sum(attribute='abertas') }}</strong>
+        <span class="stat-card__hint">Soma de todas as demandas em aberto.</span>
+    </div>
+    <div class="stat-card">
+        <p class="stat-card__label">Concluídas</p>
+        <strong class="stat-card__value">{{ usuarios_stats|sum(attribute='concluidas') }}</strong>
+        <span class="stat-card__hint">Demandas já entregues e encerradas.</span>
+    </div>
+    <div class="stat-card">
+        <p class="stat-card__label">Alta prioridade abertas</p>
+        <strong class="stat-card__value">{{ usuarios_stats|sum(attribute='alta_abertas') }}</strong>
+        <span class="stat-card__hint">Itens críticos que ainda precisam de resposta.</span>
+    </div>
+</div>
+
+{% if usuarios_stats %}
+    <div class="users-grid">
+        {% for u in usuarios_stats %}
+        <article class="user-card {% if u['alta_abertas'] > 0 %}user-card--alert{% endif %}">
+            <div class="user-card__identity">
+                <span class="avatar avatar--lg">{{ u['nome'][0] }}</span>
+                <div>
+                    <p class="user-card__name">{{ u['nome'] }}</p>
+                    <p class="user-card__username">@{{ u['username'] }}</p>
+                </div>
+            </div>
+
+            <div class="user-card__stats">
+                <div class="stat-box stat-box--open">
+                    <span class="stat-box__value">{{ u['abertas'] }}</span>
+                    <span class="stat-box__label">abertas</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-box__value">{{ u['concluidas'] }}</span>
+                    <span class="stat-box__label">concluídas</span>
+                </div>
+                <div class="stat-box {% if u['alta_abertas'] > 0 %}stat-box--alert{% endif %}">
+                    <span class="stat-box__value">{{ u['alta_abertas'] }}</span>
+                    <span class="stat-box__label">alta aberta</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-box__value">{{ u['total'] }}</span>
+                    <span class="stat-box__label">total</span>
+                </div>
+            </div>
+
+            {% if u['total'] > 0 %}
+                {% set pct = (u['abertas'] / u['total'] * 100)|int %}
+                <div>
+                    <div class="progress-bar">
+                        <div class="progress-bar__fill {% if pct > 66 %}progress-bar__fill--high{% elif pct > 33 %}progress-bar__fill--mid{% endif %}" style="width: {{ pct }}%"></div>
+                    </div>
+                    <p class="progress-label">{{ pct }}% abertas</p>
+                </div>
+            {% else %}
+                <p class="progress-label">Nenhuma demanda registrada.</p>
+            {% endif %}
+
+            <div class="user-card__actions">
+                {% if u['abertas'] > 0 %}
+                    <a href="{{ url_for('index', usuario_id=u['id']) }}" class="btn btn--secondary btn--sm">
+                        {{ u['abertas'] }} aberta{{ 's' if u['abertas'] != 1 else '' }}
+                    </a>
+                {% endif %}
+                {% if u['concluidas'] > 0 %}
+                    <a href="{{ url_for('concluidas', usuario_id=u['id']) }}" class="btn btn--secondary btn--sm">
+                        {{ u['concluidas'] }} concluída{{ 's' if u['concluidas'] != 1 else '' }}
+                    </a>
+                {% endif %}
+                {% if u['total'] == 0 %}
+                    <span class="text-sm text-muted">Sem demandas.</span>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">
+        <h3>Nenhum usuário encontrado.</h3>
+        <p>Reinicialize o banco de dados com <code>python init_db.py</code> para criar os usuários de teste.</p>
+    </div>
+{% endif %}
+
+{% endblock %}

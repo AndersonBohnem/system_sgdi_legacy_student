@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SGDI — Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-page">
+    <div class="login-box">
+        <div class="login-brand">
+            <span class="navbar__logo">SG</span>
+            <div>
+                <p class="login-brand__name">SGDI</p>
+                <p class="login-brand__sub">Sistema de Gestão de Demandas Internas</p>
+            </div>
+        </div>
+
+        <div class="login-card">
+            <div>
+                <h1>Bem-vindo de volta.</h1>
+                <p>Identifique-se para acessar o painel de demandas.</p>
+            </div>
+
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="flash-list">
+                        {% for message in messages %}
+                            <div class="flash">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('login') }}" class="form-layout">
+                <div class="field-group">
+                    <label for="username" class="field-label">Usuário</label>
+                    <input
+                        type="text"
+                        id="username"
+                        name="username"
+                        placeholder="nome.sobrenome"
+                        autocomplete="username"
+                        required
+                        autofocus
+                    >
+                </div>
+
+                <div class="field-group">
+                    <label for="senha" class="field-label">Senha</label>
+                    <input
+                        type="password"
+                        id="senha"
+                        name="senha"
+                        placeholder="••••••••"
+                        autocomplete="current-password"
+                        required
+                    >
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn--primary btn--block">Entrar</button>
+                </div>
+            </form>
+
+            <details class="credentials-hint">
+                <summary>Credenciais de teste</summary>
+                <table class="credentials-table">
+                    <thead>
+                        <tr>
+                            <th>Usuário</th>
+                            <th>Senha</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>admin</td><td>Admin@2024</td></tr>
+                        <tr><td>joao.silva</td><td>Joao@2024</td></tr>
+                        <tr><td>maria.santos</td><td>Maria@2024</td></tr>
+                        <tr><td>pedro.costa</td><td>Pedro@2024</td></tr>
+                        <tr><td>ana.lima</td><td>Ana@2024</td></tr>
+                    </tbody>
+                </table>
+            </details>
+        </div>
+
+        <p class="login-footer">SGDI v2.0 — Acesso restrito a usuários cadastrados.</p>
+    </div>
+</body>
+</html>

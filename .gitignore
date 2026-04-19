@@ -1,2 +1,69 @@
-.venv
-/venv/
+# ── Banco de dados ────────────────────────────────────────────────────────────
+demandas.db
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Ambiente virtual ──────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+.env/
+
+# ── Variáveis de ambiente ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+
+# ── Screenshots e relatórios gerados em runtime ───────────────────────────────
+test_screenshots/
+screenshots/
+SGDI_Relatorio_Testes.pdf
+*.pdf
+*.png
+
+# ── Playwright ────────────────────────────────────────────────────────────────
+playwright-report/
+test-results/
+
+# ── IDEs e editores ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# ── Sistema operacional ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Build / distribuição ──────────────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ── Testes e cobertura ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+
+# ── Arquivos temporários ──────────────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+*.orig
+*.rej
+

@@ -1,1 +1,8 @@
+# ── Aplicação principal ───────────────────────────────────────────────────────
 Flask>=3.1.0
+Werkzeug>=3.1.0         # hash de senhas (check_password_hash / generate_password_hash)
+
+# ── Testes automatizados e screenshots ───────────────────────────────────────
+playwright>=1.44.0      # automação de browser (screenshot_test.py / test_report.py)
+Pillow>=10.0.0          # redimensionamento de imagens para o PDF (test_report.py)
+reportlab>=4.0.0        # geração do PDF de relatório de testes (test_report.py)

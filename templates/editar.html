@@ -1,55 +1,46 @@
 {% extends "base.html" %}
 
-{% block hero %}
-<p class="hero-kicker">Edicao guiada</p>
-<h1>Ajuste a demanda sem perder a coerencia da priorizacao.</h1>
-<p class="hero-text">
-    Esta tela foi pensada para reduzir erro operacional: contexto do item visivel, regra de alteracao
-    explicita e acoes com peso visual compatível com o risco de cada escolha.
-</p>
-<div class="hero-actions">
-    <a href="{{ url_for('detalhes', id=demanda['id']) }}" class="button-primary">Voltar para detalhes</a>
-</div>
-{% endblock %}
-
 {% block content %}
-<section class="content-grid">
-    <div class="panel-card">
-        <div class="section-header">
-            <div>
-                <p class="section-kicker">Edicao</p>
-                <h2>Atualize os dados da demanda #{{ demanda['id'] }}.</h2>
-            </div>
-            <p class="section-note">Se a prioridade mudar, a triagem do painel muda junto.</p>
+<div class="page-header">
+    <div>
+        <h1>Editar demanda</h1>
+        <p class="page-header__sub">Ajuste sem perder a coerência da priorização.</p>
+    </div>
+    <div class="page-header__actions">
+        <a href="{{ url_for('detalhes', id=demanda['id']) }}" class="btn btn--secondary">Voltar aos detalhes</a>
+    </div>
+</div>
+
+<div class="content-grid">
+    <div class="card">
+        <div class="card__header">
+            <h2>Demanda #{{ demanda['id'] }}</h2>
+            <p>Se a prioridade mudar, a triagem do painel muda junto.</p>
         </div>
+        <div class="card__body">
+            <form method="POST" action="{{ url_for('editar', id=demanda['id']) }}" class="form-layout">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-        <form method="POST" action="{{ url_for('editar', id=demanda['id']) }}" class="form-layout">
-            <div class="field-group">
-                <label for="nome_editor" class="field-label">Seu nome para validacao</label>
-                <input
-                    type="text"
-                    id="nome_editor"
-                    name="nome_editor"
-                    placeholder="Digite seu nome"
-                    required
-                >
-                <p class="field-help">A troca de prioridade e protegida pela regra de autoria da demanda.</p>
-            </div>
-
-            <div class="field-group">
-                <label for="titulo" class="field-label">Titulo</label>
-                <input type="text" id="titulo" name="titulo" value="{{ demanda['titulo'] }}" required>
-            </div>
-
-            <div class="field-group">
-                <label for="descricao" class="field-label">Descricao</label>
-                <textarea id="descricao" name="descricao" rows="6" required>{{ demanda['descricao'] }}</textarea>
-            </div>
-
-            <div class="field-row">
                 <div class="field-group">
-                    <label for="solicitante" class="field-label">Solicitante</label>
-                    <input type="text" id="solicitante" name="solicitante" value="{{ demanda['solicitante'] }}" required>
+                    <label class="field-label">Editando como</label>
+                    <div class="user-display">
+                        <span class="avatar avatar--md">{{ usuario_logado.nome[0] }}</span>
+                        <div>
+                            <span class="user-display__name">{{ usuario_logado.nome }}</span>
+                            <span class="user-display__username">@{{ usuario_logado.username }}</span>
+                        </div>
+                    </div>
+                    <p class="field-help">Como solicitante, você pode alterar todos os campos incluindo a prioridade.</p>
+                </div>
+
+                <div class="field-group">
+                    <label for="titulo" class="field-label">Título</label>
+                    <input type="text" id="titulo" name="titulo" value="{{ demanda['titulo'] }}" maxlength="200" required>
+                </div>
+
+                <div class="field-group">
+                    <label for="descricao" class="field-label">Descrição</label>
+                    <textarea id="descricao" name="descricao" rows="6" maxlength="2000" required>{{ demanda['descricao'] }}</textarea>
                 </div>
 
                 <div class="field-group">
@@ -61,55 +52,77 @@
                             </option>
                         {% endfor %}
                     </select>
-                    <p class="field-help">Somente o criador <strong>{{ demanda['solicitante'] }}</strong> pode alterar esse campo.</p>
                 </div>
-            </div>
 
-            <div class="field-group">
-                <label class="field-label">Data de criacao</label>
-                <input type="text" value="{{ demanda['data_criacao']|display_datetime }}" disabled>
-            </div>
+                <div class="field-group">
+                    <label class="field-label">Solicitante original</label>
+                    <div class="user-display user-display--muted">
+                        <span class="avatar avatar--md">{{ demanda['solicitante'][0] }}</span>
+                        <div>
+                            <span class="user-display__name">{{ demanda['solicitante'] }}</span>
+                            <span class="user-display__username">@{{ demanda['usuario_username'] }}</span>
+                        </div>
+                    </div>
+                </div>
 
-            <div class="form-actions">
-                <button type="submit" class="button-primary">Salvar alteracoes</button>
-                <a href="{{ url_for('detalhes', id=demanda['id']) }}" class="button-secondary">Cancelar</a>
-            </div>
-        </form>
+                <div class="field-group">
+                    <label class="field-label">Criada em</label>
+                    <input type="text" value="{{ demanda['data_criacao']|display_datetime }}" disabled>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn--primary">Salvar alterações</button>
+                    <a href="{{ url_for('detalhes', id=demanda['id']) }}" class="btn btn--secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
     </div>
 
-    <aside class="side-stack">
-        <div class="panel-card panel-card--soft">
-            <p class="section-kicker">Resumo atual</p>
-            <h3>Contexto rapido da demanda.</h3>
-            <dl class="summary-list">
-                <div>
-                    <dt>Prioridade atual</dt>
-                    <dd><span class="badge priority-{{ demanda['prioridade']|priority_slug }}">{{ demanda['prioridade'] }}</span></dd>
-                </div>
-                <div>
-                    <dt>Status</dt>
-                    <dd><span class="status-chip {% if demanda['status'] == 'Aberta' %}is-open{% else %}is-done{% endif %}">{{ demanda['status'] }}</span></dd>
-                </div>
-                <div>
-                    <dt>Solicitante</dt>
-                    <dd>{{ demanda['solicitante'] }}</dd>
-                </div>
-                <div>
-                    <dt>Criada em</dt>
-                    <dd>{{ demanda['data_criacao']|display_datetime }}</dd>
-                </div>
-            </dl>
+    <div class="side-stack">
+        <div class="card">
+            <div class="card__header">
+                <h2>Resumo atual</h2>
+                <p>Contexto rápido da demanda.</p>
+            </div>
+            <div class="card__body">
+                <dl class="summary-list">
+                    <div class="summary-item">
+                        <dt>Prioridade atual</dt>
+                        <dd><span class="chip chip--{{ demanda['prioridade']|priority_slug }}">{{ demanda['prioridade'] }}</span></dd>
+                    </div>
+                    <div class="summary-item">
+                        <dt>Status</dt>
+                        <dd>
+                            <span class="chip {% if demanda['status'] == 'Aberta' %}chip--open{% else %}chip--done{% endif %}">
+                                {{ demanda['status'] }}
+                            </span>
+                        </dd>
+                    </div>
+                    <div class="summary-item">
+                        <dt>Solicitante</dt>
+                        <dd>{{ demanda['solicitante'] }}</dd>
+                    </div>
+                    <div class="summary-item">
+                        <dt>Criada em</dt>
+                        <dd>{{ demanda['data_criacao']|display_datetime }}</dd>
+                    </div>
+                </dl>
+            </div>
         </div>
 
-        <div class="panel-card panel-card--soft">
-            <p class="section-kicker">Boas praticas</p>
-            <h3>Quando vale editar a prioridade?</h3>
-            <ul class="bullet-list">
-                <li>Quando o impacto operacional mudou desde a abertura.</li>
-                <li>Quando uma urgencia real surgiu e precisa refletir no painel.</li>
-                <li>Quando a demanda foi classificada acima do necessario e esta poluindo a triagem.</li>
-            </ul>
+        <div class="card">
+            <div class="card__header">
+                <h2>Boas práticas</h2>
+                <p>Quando vale editar a prioridade?</p>
+            </div>
+            <div class="card__body">
+                <ul style="list-style: disc; padding-left: 16px; display: grid; gap: 8px; font-size: 0.82rem; color: var(--text-muted); line-height: 1.5;">
+                    <li>Quando o impacto operacional mudou desde a abertura.</li>
+                    <li>Quando uma urgência real surgiu e precisa refletir no painel.</li>
+                    <li>Quando a demanda foi classificada acima do necessário e está poluindo a triagem.</li>
+                </ul>
+            </div>
         </div>
-    </aside>
-</section>
+    </div>
+</div>
 {% endblock %}

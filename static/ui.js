@@ -20,7 +20,7 @@ function setupDemandModule(module) {
     const loadMoreButton = module.querySelector("[data-load-more]");
     const loadMoreStatus = module.querySelector("[data-load-more-status]");
     const emptyState = module.querySelector("[data-empty-state]");
-    const searchForm = document.querySelector(".search-panel .search-form");
+    const searchForm = document.querySelector("[data-search-form]");
 
     const summary = {
         total: document.querySelector("[data-summary-total]"),

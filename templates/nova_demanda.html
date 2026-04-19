@@ -1,65 +1,63 @@
 {% extends "base.html" %}
 
-{% block hero %}
-<p class="hero-kicker">Nova demanda</p>
-<h1>Registre com contexto para a triagem funcionar melhor.</h1>
-<p class="hero-text">
-    Quanto mais clara for a origem e a prioridade da demanda, mais facil fica decidir o que entra
-    primeiro no fluxo e o que pode ser planejado para depois.
-</p>
-<div class="hero-actions">
-    <a href="{{ url_for('index') }}" class="button-primary">Voltar para o painel</a>
-</div>
-{% endblock %}
-
 {% block content %}
-<section class="content-grid">
-    <div class="panel-card">
-        <div class="section-header">
-            <div>
-                <p class="section-kicker">Cadastro</p>
-                <h2>Preencha os dados da demanda.</h2>
-            </div>
-            <p class="section-note">Campos bem definidos ajudam a equipe a priorizar com menos retrabalho.</p>
+<div class="page-header">
+    <div>
+        <h1>Nova demanda</h1>
+        <p class="page-header__sub">Registre com contexto claro para a triagem funcionar melhor.</p>
+    </div>
+    <div class="page-header__actions">
+        <a href="{{ url_for('index') }}" class="btn btn--secondary">Voltar ao painel</a>
+    </div>
+</div>
+
+<div class="content-grid">
+    <div class="card">
+        <div class="card__header">
+            <h2>Dados da demanda</h2>
+            <p>Campos bem definidos ajudam a equipe a priorizar com menos retrabalho.</p>
         </div>
+        <div class="card__body">
+            <form method="POST" action="{{ url_for('nova_demanda') }}" class="form-layout">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-        <form method="POST" action="{{ url_for('nova_demanda') }}" class="form-layout">
-            <div class="field-group">
-                <label for="titulo" class="field-label">Titulo</label>
-                <input
-                    type="text"
-                    id="titulo"
-                    name="titulo"
-                    value="{{ form_data.titulo }}"
-                    placeholder="Ex: Ajustar relatorio de matriculas"
-                    required
-                >
-                <p class="field-help">Use um resumo curto que permita identificar a acao rapidamente.</p>
-            </div>
-
-            <div class="field-group">
-                <label for="descricao" class="field-label">Descricao</label>
-                <textarea
-                    id="descricao"
-                    name="descricao"
-                    rows="6"
-                    placeholder="Explique o problema, impacto e expectativa da entrega."
-                    required
-                >{{ form_data.descricao }}</textarea>
-                <p class="field-help">Descreva impacto operacional e urgencia para orientar a execucao.</p>
-            </div>
-
-            <div class="field-row">
                 <div class="field-group">
-                    <label for="solicitante" class="field-label">Solicitante</label>
+                    <label class="field-label">Solicitante</label>
+                    <div class="user-display">
+                        <span class="avatar avatar--md">{{ usuario_logado.nome[0] }}</span>
+                        <div>
+                            <span class="user-display__name">{{ usuario_logado.nome }}</span>
+                            <span class="user-display__username">@{{ usuario_logado.username }}</span>
+                        </div>
+                    </div>
+                    <p class="field-help">A demanda será registrada em seu nome automaticamente.</p>
+                </div>
+
+                <div class="field-group">
+                    <label for="titulo" class="field-label">Título</label>
                     <input
                         type="text"
-                        id="solicitante"
-                        name="solicitante"
-                        value="{{ form_data.solicitante }}"
-                        placeholder="Quem abriu a demanda"
+                        id="titulo"
+                        name="titulo"
+                        value="{{ form_data.titulo }}"
+                        placeholder="Ex: Ajustar relatório de matrículas"
+                        maxlength="200"
                         required
                     >
+                    <p class="field-help">Use um resumo curto que permita identificar a ação rapidamente.</p>
+                </div>
+
+                <div class="field-group">
+                    <label for="descricao" class="field-label">Descrição</label>
+                    <textarea
+                        id="descricao"
+                        name="descricao"
+                        rows="6"
+                        placeholder="Explique o problema, impacto e expectativa da entrega."
+                        maxlength="2000"
+                        required
+                    >{{ form_data.descricao }}</textarea>
+                    <p class="field-help">Descreva impacto operacional e urgência para orientar a execução.</p>
                 </div>
 
                 <div class="field-group">
@@ -73,44 +71,52 @@
                         {% endfor %}
                     </select>
                 </div>
-            </div>
 
-            <div class="form-actions">
-                <button type="submit" class="button-primary">Salvar demanda</button>
-                <a href="{{ url_for('index') }}" class="button-secondary">Cancelar</a>
-            </div>
-        </form>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn--primary">Salvar demanda</button>
+                    <a href="{{ url_for('index') }}" class="btn btn--secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
     </div>
 
-    <aside class="side-stack">
-        <div class="panel-card panel-card--soft">
-            <p class="section-kicker">Guia de prioridade</p>
-            <h3>Escolha o nivel com criterio de negocio.</h3>
-            <ul class="priority-guide">
-                <li>
-                    <span class="badge priority-alta">Alta</span>
-                    Use quando houver bloqueio real, risco operacional ou prazo imediato.
-                </li>
-                <li>
-                    <span class="badge priority-media">Media</span>
-                    Use para demandas importantes que precisam entrar no ciclo atual.
-                </li>
-                <li>
-                    <span class="badge priority-baixa">Baixa</span>
-                    Use para melhorias planejadas, sem impacto imediato no fluxo.
-                </li>
-            </ul>
+    <div class="side-stack">
+        <div class="card">
+            <div class="card__header">
+                <h2>Guia de prioridade</h2>
+                <p>Escolha o nível com critério de negócio.</p>
+            </div>
+            <div class="card__body">
+                <ul class="priority-guide">
+                    <li>
+                        <span class="chip chip--alta">Alta</span>
+                        Bloqueio real, risco operacional ou prazo imediato.
+                    </li>
+                    <li>
+                        <span class="chip chip--media">Média</span>
+                        Demanda importante que precisa entrar no ciclo atual.
+                    </li>
+                    <li>
+                        <span class="chip chip--baixa">Baixa</span>
+                        Melhoria planejada, sem impacto imediato no fluxo.
+                    </li>
+                </ul>
+            </div>
         </div>
 
-        <div class="panel-card panel-card--soft">
-            <p class="section-kicker">Qualidade de cadastro</p>
-            <h3>O que melhora a UX da equipe depois?</h3>
-            <ul class="bullet-list">
-                <li>Titulo objetivo para facilitar busca e leitura na lista.</li>
-                <li>Descricao com impacto claro para evitar reclassificacoes.</li>
-                <li>Prioridade coerente para preservar a confianca na triagem.</li>
-            </ul>
+        <div class="card">
+            <div class="card__header">
+                <h2>Qualidade de cadastro</h2>
+                <p>O que melhora a triagem da equipe?</p>
+            </div>
+            <div class="card__body">
+                <ul style="list-style: disc; padding-left: 16px; display: grid; gap: 8px; font-size: 0.82rem; color: var(--text-muted); line-height: 1.5;">
+                    <li>Título objetivo para facilitar busca e leitura na lista.</li>
+                    <li>Descrição com impacto claro para evitar reclassificações.</li>
+                    <li>Prioridade coerente para preservar a confiança na triagem.</li>
+                </ul>
+            </div>
         </div>
-    </aside>
-</section>
+    </div>
+</div>
 {% endblock %}
