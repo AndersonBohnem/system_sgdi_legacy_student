@@ -9,7 +9,7 @@
 <body>
     <nav class="navbar">
         <div class="navbar__inner">
-            <a href="{{ url_for('index') }}" class="navbar__brand">
+            <a href="{{ url_for('dashboard') }}" class="navbar__brand">
                 <span class="navbar__logo">SG</span>
                 <span class="navbar__name">SGDI</span>
             </a>
@@ -30,6 +30,11 @@
                 <a href="{{ url_for('usuarios') }}"
                    class="navbar__link {% if request.endpoint == 'usuarios' %}is-active{% endif %}">
                     Usuários
+                </a>
+                <a href="{{ url_for('dashboard') }}"
+                   class="navbar__link {% if request.endpoint == 'dashboard' %}is-active{% endif %}">
+                    Dashboard
+                    <span class="nav-alert-badge" id="nav-alert-badge" style="display:none"></span>
                 </a>
             </div>
 
@@ -67,5 +72,28 @@
     </footer>
 
     <script src="{{ url_for('static', filename='ui.js') }}"></script>
+    {% if usuario_logado %}
+    <script>
+    (function() {
+        function updateAlertBadge() {
+            fetch('/api/alerts/count')
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    var badge = document.getElementById('nav-alert-badge');
+                    if (!badge) return;
+                    if (d.count > 0) {
+                        badge.textContent = d.count;
+                        badge.style.display = 'inline-flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                })
+                .catch(function() {});
+        }
+        updateAlertBadge();
+        setInterval(updateAlertBadge, 60000);
+    })();
+    </script>
+    {% endif %}
 </body>
 </html>

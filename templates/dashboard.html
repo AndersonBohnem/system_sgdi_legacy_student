@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="dash-page">
+
+    <!-- ── Header ───────────────────────────────────────────────────────────── -->
+    <div class="dash-header">
+        <div class="dash-header__left">
+            <h1 class="dash-header__title">Dashboard Gerencial</h1>
+            <p class="dash-header__sub">Visão executiva em tempo real · SGDI</p>
+        </div>
+    </div>
+
+    <!-- ── Filters ──────────────────────────────────────────────────────────── -->
+    <div class="card dash-filters">
+        <div class="dash-filters__row">
+            <div class="dash-filters__group">
+                <label class="dash-filters__label" for="f-periodo">Período</label>
+                <select class="dash-filters__select" id="f-periodo" onchange="handlePeriodChange()">
+                    <option value="all">Todos os períodos</option>
+                    <option value="hoje">Hoje</option>
+                    <option value="7d">Últimos 7 dias</option>
+                    <option value="30d">Último mês</option>
+                    <option value="custom">Personalizado</option>
+                </select>
+            </div>
+
+            <div class="dash-filters__group dash-filters__group--custom" id="custom-dates" style="display:none">
+                <label class="dash-filters__label" for="f-data-inicio">De</label>
+                <input class="dash-filters__date" type="date" id="f-data-inicio">
+                <label class="dash-filters__label" for="f-data-fim">Até</label>
+                <input class="dash-filters__date" type="date" id="f-data-fim">
+            </div>
+
+            <div class="dash-filters__group">
+                <label class="dash-filters__label" for="f-usuario">Responsável</label>
+                <select class="dash-filters__select" id="f-usuario">
+                    <option value="">Todos</option>
+                    {% for u in usuarios %}
+                    <option value="{{ u.id }}">{{ u.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="dash-filters__group">
+                <label class="dash-filters__label" for="f-prioridade">Prioridade</label>
+                <select class="dash-filters__select" id="f-prioridade">
+                    <option value="">Todas</option>
+                    {% for p in prioridades %}
+                    <option value="{{ p }}">{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="dash-filters__group">
+                <label class="dash-filters__label" for="f-status">Status</label>
+                <select class="dash-filters__select" id="f-status">
+                    <option value="">Todos</option>
+                    {% for s in todos_status %}
+                    <option value="{{ s }}">{{ s }}</option>
+                    {% endfor %}
+                    <option value="Indefinido">Indefinido</option>
+                </select>
+            </div>
+
+            <div class="dash-filters__actions">
+                <button class="btn btn--primary btn--sm" onclick="refreshDashboard()">Aplicar</button>
+                <button class="btn btn--outline btn--sm" onclick="resetFilters()">Limpar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Loading ──────────────────────────────────────────────────────────── -->
+    <div id="dash-loading" class="dash-loading" style="display:none">
+        <div class="dash-spinner"></div>
+        <span>Atualizando...</span>
+    </div>
+
+    <!-- ── KPI Cards ────────────────────────────────────────────────────────── -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-card__icon">📊</div>
+            <div class="kpi-card__value" id="kpi-total">—</div>
+            <div class="kpi-card__label">Total de Demandas</div>
+        </div>
+
+        <div class="kpi-card kpi-card--blue">
+            <div class="kpi-card__icon">📋</div>
+            <div class="kpi-card__value" id="kpi-abertas">—</div>
+            <div class="kpi-card__label">Abertas</div>
+            <div class="kpi-card__pct" id="kpi-abertas-pct"></div>
+        </div>
+
+        <div class="kpi-card kpi-card--amber">
+            <div class="kpi-card__icon">⚙️</div>
+            <div class="kpi-card__value" id="kpi-andamento">—</div>
+            <div class="kpi-card__label">Em Andamento</div>
+        </div>
+
+        <div class="kpi-card kpi-card--green">
+            <div class="kpi-card__icon">✅</div>
+            <div class="kpi-card__value" id="kpi-concluidas">—</div>
+            <div class="kpi-card__label">Concluídas</div>
+            <div class="kpi-card__pct" id="kpi-concluidas-pct"></div>
+        </div>
+
+        <div class="kpi-card kpi-card--red">
+            <div class="kpi-card__icon">⏰</div>
+            <div class="kpi-card__value" id="kpi-atrasadas">—</div>
+            <div class="kpi-card__label">Atrasadas (SLA)</div>
+            <div class="kpi-card__pct" id="kpi-atrasadas-pct"></div>
+        </div>
+
+        <div class="kpi-card kpi-card--critical">
+            <div class="kpi-card__icon">🚨</div>
+            <div class="kpi-card__value" id="kpi-criticas">—</div>
+            <div class="kpi-card__label">Prioridade Crítica</div>
+            <div class="kpi-card__pct" id="kpi-criticas-pct"></div>
+        </div>
+
+        <div class="kpi-card kpi-card--tempo">
+            <div class="kpi-card__icon">⏱️</div>
+            <div class="kpi-card__value" id="kpi-tempo">—</div>
+            <div class="kpi-card__label">Tempo Médio de Resolução</div>
+            <div class="kpi-card__sub">ponderado por criticidade</div>
+        </div>
+    </div>
+
+    <!-- ── Críticas e Atrasadas (em destaque) ────────────────────────────────── -->
+    <div class="card card--critical-section">
+        <div class="card__header card__header--critical">
+            <div class="critical-header">
+                <div class="critical-header__title">
+                    <span class="critical-alert-icon">🚨</span>
+                    <h3 class="card__title">Críticas e Atrasadas</h3>
+                    <span class="critical-count-badge" id="critical-count">0</span>
+                </div>
+                <p class="critical-header__sub">
+                    Prioridade CRÍTICA com SLA vencido — requer ação imediata
+                </p>
+            </div>
+            <div class="critical-header__actions">
+                <button class="btn btn--outline btn--sm" onclick="exportCritical('csv')" title="Exportar CSV">CSV</button>
+                <button class="btn btn--outline btn--sm" onclick="exportCritical('pdf')" title="Exportar PDF">PDF</button>
+                <button class="btn btn--primary btn--sm" onclick="exportCritical('xlsx')" title="Exportar Excel">Excel</button>
+            </div>
+        </div>
+        <div class="card__body" style="overflow-x:auto">
+            <table class="data-table data-table--critical">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Título</th>
+                        <th>Responsável</th>
+                        <th>Solicitante</th>
+                        <th class="ta-right">Dias Atrasados</th>
+                        <th>SLA Previsto</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-critical">
+                    <tr><td colspan="7" class="table-empty">Carregando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── Charts Row ───────────────────────────────────────────────────────── -->
+    <div class="chart-grid">
+        <div class="card chart-card">
+            <div class="card__header">
+                <h3 class="card__title">Por Status</h3>
+            </div>
+            <div class="chart-card__body">
+                <canvas id="chart-status"></canvas>
+            </div>
+        </div>
+
+        <div class="card chart-card">
+            <div class="card__header">
+                <h3 class="card__title">Por Prioridade</h3>
+            </div>
+            <div class="chart-card__body">
+                <canvas id="chart-prioridade"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Temporal Evolution ───────────────────────────────────────────────── -->
+    <div class="card">
+        <div class="card__header">
+            <h3 class="card__title">Evolução Temporal</h3>
+            <div class="gran-tabs">
+                <button class="gran-tab" data-gran="diario"  onclick="setGranularity(this)">Diário</button>
+                <button class="gran-tab" data-gran="semanal" onclick="setGranularity(this)">Semanal</button>
+                <button class="gran-tab is-active" data-gran="mensal" onclick="setGranularity(this)">Mensal</button>
+            </div>
+        </div>
+        <div class="card__body">
+            <canvas id="chart-evolucao" style="max-height:280px"></canvas>
+        </div>
+    </div>
+
+    <!-- ── Responsáveis Table ───────────────────────────────────────────────── -->
+    <div class="card">
+        <div class="card__header">
+            <h3 class="card__title">Por Responsável</h3>
+        </div>
+        <div class="card__body" style="overflow-x:auto">
+            <table class="data-table" id="table-responsaveis">
+                <thead>
+                    <tr>
+                        <th>Responsável</th>
+                        <th class="ta-right">Total</th>
+                        <th class="ta-right">Abertas</th>
+                        <th class="ta-right">Atrasadas</th>
+                        <th class="ta-right">Críticas</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-responsaveis">
+                    <tr><td colspan="5" class="table-empty">Carregando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── Exportar todas as demandas ────────────────────────────────────────── -->
+    <div class="card dash-export-all">
+        <div class="dash-export-all__body">
+            <div class="dash-export-all__info">
+                <span class="dash-export-all__label">Exportar todas as demandas</span>
+                <span class="dash-export-all__hint">Inclui todas as demandas conforme os filtros ativos acima — não apenas críticas e atrasadas.</span>
+            </div>
+            <div class="dash-export-all__actions">
+                <button class="btn btn--outline btn--sm" onclick="exportData('csv')" title="Exportar todas em CSV">CSV</button>
+                <button class="btn btn--outline btn--sm" onclick="exportData('pdf')" title="Exportar todas em PDF">PDF</button>
+                <button class="btn btn--primary btn--sm" onclick="exportData('xlsx')" title="Exportar todas em Excel">Excel</button>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /.dash-page -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+'use strict';
+
+// ── Chart instances ───────────────────────────────────────────────────────────
+let chartStatus = null;
+let chartPrioridade = null;
+let chartEvolucao = null;
+let currentGranularity = 'mensal';
+
+// ── Color maps ────────────────────────────────────────────────────────────────
+const STATUS_COLORS = {
+    'Aberta':       '#3b82f6',
+    'Em andamento': '#f59e0b',
+    'Concluída':    '#10b981',
+    'Cancelada':    '#94a3b8',
+    'Indefinido':   '#e2e8f0',
+};
+const PRIORITY_COLORS = {
+    'Crítica':    '#dc2626',
+    'Alta':       '#f59e0b',
+    'Média':      '#3b82f6',
+    'Baixa':      '#10b981',
+    'Indefinido': '#94a3b8',
+};
+
+// ── Filter helpers ────────────────────────────────────────────────────────────
+function getFilterParams() {
+    const p = new URLSearchParams();
+    const periodo = document.getElementById('f-periodo').value;
+    if (periodo && periodo !== 'all') p.set('periodo', periodo);
+    if (periodo === 'custom') {
+        const ini = document.getElementById('f-data-inicio').value;
+        const fim = document.getElementById('f-data-fim').value;
+        if (ini) p.set('data_inicio', ini);
+        if (fim)  p.set('data_fim', fim);
+    }
+    const sel = document.getElementById('f-usuario');
+    if (sel.value) p.set('usuario_id', sel.value);
+    const prio = document.getElementById('f-prioridade').value;
+    if (prio) p.set('prioridade', prio);
+    const status = document.getElementById('f-status').value;
+    if (status) p.set('status', status);
+    return p.toString();
+}
+
+function setGranularity(btn) {
+    document.querySelectorAll('.gran-tab').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    currentGranularity = btn.dataset.gran;
+    fetchDashboardData();
+}
+
+function handlePeriodChange() {
+    const v = document.getElementById('f-periodo').value;
+    document.getElementById('custom-dates').style.display = v === 'custom' ? 'flex' : 'none';
+}
+
+function resetFilters() {
+    ['f-periodo', 'f-usuario', 'f-prioridade', 'f-status'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('f-data-inicio').value = '';
+    document.getElementById('f-data-fim').value = '';
+    document.getElementById('custom-dates').style.display = 'none';
+    refreshDashboard();
+}
+
+// ── Loading ───────────────────────────────────────────────────────────────────
+function setLoading(on) {
+    document.getElementById('dash-loading').style.display = on ? 'flex' : 'none';
+}
+
+// ── KPI updater ───────────────────────────────────────────────────────────────
+function _updateKPIs(d) {
+    setText('kpi-total',          d.total.toLocaleString('pt-BR'));
+    setText('kpi-abertas',        d.abertas.toLocaleString('pt-BR'));
+    setText('kpi-abertas-pct',    d.pct_abertas + '% do total');
+    setText('kpi-andamento',      d.em_andamento.toLocaleString('pt-BR'));
+    setText('kpi-concluidas',     d.concluidas.toLocaleString('pt-BR'));
+    setText('kpi-concluidas-pct', d.pct_concluidas + '% do total');
+    setText('kpi-atrasadas',      d.atrasadas.toLocaleString('pt-BR'));
+    setText('kpi-atrasadas-pct',  d.pct_atrasadas + '% do total');
+    setText('kpi-criticas',       d.criticas.toLocaleString('pt-BR'));
+    setText('kpi-criticas-pct',   d.criticas_atrasadas + ' atrasadas');
+    setText('kpi-tempo', d.tempo_medio_dias !== null ? d.tempo_medio_dias + ' dias' : '—');
+
+    const tbody = document.getElementById('tbody-responsaveis');
+    if (!d.por_responsavel.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="table-empty">Nenhum dado</td></tr>';
+        return;
+    }
+    tbody.innerHTML = d.por_responsavel.map(r => `
+        <tr class="${r.atrasadas > 0 ? 'row--warning' : ''}">
+            <td class="td-name">${esc(r.nome)}</td>
+            <td class="ta-right">${r.total}</td>
+            <td class="ta-right">${r.abertas}</td>
+            <td class="ta-right${r.atrasadas > 0 ? ' td--danger' : ''}">${r.atrasadas}</td>
+            <td class="ta-right${r.criticas > 0 ? ' td--critical' : ''}">${r.criticas}</td>
+        </tr>
+    `).join('');
+}
+
+// ── Charts updater ────────────────────────────────────────────────────────────
+function _updateCharts(d) {
+    const sLabels = d.por_status.map(r => r.label);
+    const sData   = d.por_status.map(r => r.total);
+    const sColors = sLabels.map(l => STATUS_COLORS[l] || '#94a3b8');
+    const sTotal  = sData.reduce((a, b) => a + b, 0);
+
+    if (chartStatus) chartStatus.destroy();
+    chartStatus = new Chart(document.getElementById('chart-status'), {
+        type: 'doughnut',
+        data: { labels: sLabels, datasets: [{ data: sData, backgroundColor: sColors, borderWidth: 3, borderColor: '#ffffff' }] },
+        options: {
+            responsive: true, maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 16 } },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} (${sTotal ? Math.round(ctx.raw/sTotal*100) : 0}%)` } },
+            },
+        },
+    });
+
+    const pLabels = d.por_prioridade.map(r => r.label);
+    const pData   = d.por_prioridade.map(r => r.total);
+    const pColors = pLabels.map(l => PRIORITY_COLORS[l] || '#94a3b8');
+
+    if (chartPrioridade) chartPrioridade.destroy();
+    chartPrioridade = new Chart(document.getElementById('chart-prioridade'), {
+        type: 'bar',
+        data: { labels: pLabels, datasets: [{ label: 'Demandas', data: pData, backgroundColor: pColors, borderRadius: 6 }] },
+        options: {
+            responsive: true, maintainAspectRatio: true, indexAxis: 'y',
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 }, stepSize: 1 } },
+                y: { grid: { display: false }, ticks: { font: { size: 12 } } },
+            },
+        },
+    });
+
+    const eLabels     = d.evolucao.map(r => fmtPeriodo(r.periodo));
+    const eCriadas    = d.evolucao.map(r => r.criadas);
+    const eConcluidas = d.evolucao.map(r => r.concluidas);
+
+    if (chartEvolucao) chartEvolucao.destroy();
+    chartEvolucao = new Chart(document.getElementById('chart-evolucao'), {
+        type: 'line',
+        data: {
+            labels: eLabels,
+            datasets: [
+                { label: 'Criadas',    data: eCriadas,    borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)',  fill: true, tension: 0.4, pointRadius: 4, pointHoverRadius: 7 },
+                { label: 'Concluídas', data: eConcluidas, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.08)', fill: true, tension: 0.4, pointRadius: 4, pointHoverRadius: 7 },
+            ],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: true,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'top', labels: { font: { size: 12 }, padding: 16 } } },
+            scales: {
+                x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 } } },
+                y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 }, stepSize: 1 }, beginAtZero: true },
+            },
+        },
+    });
+}
+
+// ── Critical updater ──────────────────────────────────────────────────────────
+function _updateCritical(rows) {
+    setText('critical-count', rows.length);
+    const tbody = document.getElementById('tbody-critical');
+    if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="table-empty table-empty--ok">✅ Nenhuma demanda crítica atrasada no momento</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => `
+        <tr class="row--critical">
+            <td><a href="/detalhes/${r.id}" class="id-link">#${r.id}</a></td>
+            <td class="td-title"><a href="/detalhes/${r.id}">${esc(r.titulo)}</a></td>
+            <td class="${r.responsavel === 'Sem responsável' ? 'td--no-resp' : ''}">${esc(r.responsavel)}</td>
+            <td>${esc(r.solicitante)}</td>
+            <td class="ta-right"><span class="dias-badge">${r.dias_atrasados}d</span></td>
+            <td>${fmtDate(r.data_prevista)}</td>
+            <td><span class="status-chip status-chip--${statusSlug(r.status)}">${esc(r.status)}</span></td>
+        </tr>
+    `).join('');
+}
+
+// ── Single fetch ──────────────────────────────────────────────────────────────
+async function fetchDashboardData() {
+    const base = getFilterParams();
+    const gran = 'granularity=' + currentGranularity;
+    const qs = base ? base + '&' + gran : gran;
+    const res = await fetch('/api/dashboard/data?' + qs);
+    if (!res.ok) return;
+    const d = await res.json();
+    _updateKPIs(d.kpis);
+    _updateCharts(d.charts);
+    _updateCritical(d.critical);
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+function exportData(type) {
+    const qs = getFilterParams();
+    window.location.href = '/api/dashboard/export?type=' + type + (qs ? '&' + qs : '');
+}
+
+function exportCritical(type) {
+    window.location.href = '/api/dashboard/critical-overdue/export?type=' + type;
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function setText(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+}
+
+function esc(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function fmtDate(s) {
+    if (!s) return '—';
+    const m = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : s;
+}
+
+function fmtPeriodo(s) {
+    if (!s) return s;
+    const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const parts = s.split('-');
+    if (currentGranularity === 'diario' && parts.length === 3) return `${parts[2]}/${parts[1]}`;
+    if (currentGranularity === 'semanal' && parts.length === 2) return `Sem ${parts[1]}/${parts[0].slice(2)}`;
+    return `${months[parseInt(parts[1], 10) - 1]}/${parts[0].slice(2)}`;
+}
+
+function statusSlug(s) {
+    const map = { 'Aberta': 'aberta', 'Em andamento': 'andamento', 'Concluída': 'concluida', 'Cancelada': 'cancelada' };
+    return map[s] || 'aberta';
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+async function refreshDashboard() {
+    setLoading(true);
+    try {
+        await fetchDashboardData();
+    } catch (err) {
+        console.error('Dashboard refresh error:', err);
+    } finally {
+        setLoading(false);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    refreshDashboard();
+    setInterval(refreshDashboard, 60000);
+});
+</script>
+{% endblock %}

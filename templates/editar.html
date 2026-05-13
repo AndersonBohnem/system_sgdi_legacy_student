@@ -55,6 +55,28 @@
                 </div>
 
                 <div class="field-group">
+                    <label for="data_prevista" class="field-label">
+                        Prazo previsto <span style="font-weight:400;color:var(--text-muted)">(opcional)</span>
+                    </label>
+                    <input type="date" id="data_prevista" name="data_prevista" value="{{ (demanda['data_prevista'] or '')[:10] }}">
+                    <p class="field-help">Define o SLA da demanda. Aparece nos indicadores de atraso do Dashboard.</p>
+                </div>
+
+                <div class="field-group">
+                    <label for="responsavel_id" class="field-label">
+                        Responsável pela execução <span style="font-weight:400;color:var(--text-muted)">(opcional)</span>
+                    </label>
+                    <select id="responsavel_id" name="responsavel_id">
+                        <option value="">Não atribuído</option>
+                        {% for u in usuarios %}
+                            <option value="{{ u.id }}" {% if demanda['responsavel_id'] == u.id %}selected{% endif %}>
+                                {{ u.nome }} (@{{ u.username }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="field-group">
                     <label class="field-label">Solicitante original</label>
                     <div class="user-display user-display--muted">
                         <span class="avatar avatar--md">{{ demanda['solicitante'][0] }}</span>

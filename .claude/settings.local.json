@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python init_db.py)",
+      "Bash(python -c ':*)",
+      "Bash(python screenshot_test.py)",
+      "Bash(python -c \"import reportlab; print\\('reportlab', reportlab.Version\\)\")",
+      "Bash(python -c \"import fpdf2; print\\('fpdf2 ok'\\)\")",
+      "Bash(pip install:*)",
+      "Bash(python test_report.py)",
+      "Bash(Get-ChildItem -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "Bash(python -c ' *)",
+      "Bash(ls \"c:\\\\Users\\\\luisf\\\\.claude\\\\projects\\\\c--DesafioDaTecnologia-system-sgdi-legacy-student\\\\memory\\\\\" 2>/dev/null || echo \"directory ready\")",
+      "Read(//c/Users/luisf/.claude/projects/c--DesafioDaTecnologia-system-sgdi-legacy-student/memory\" 2>/dev/**)",
+      "Bash(python -c \"import app; print\\('OK'\\)\")",
+      "Bash(python -c \"import app; print\\('OK - rotas:', [r.rule for r in app.app.url_map.iter_rules\\(\\) if 'critical' in r.rule]\\)\")",
+      "Bash(python -c \"import app; rules = [\\(r.rule, r.endpoint\\) for r in app.app.url_map.iter_rules\\(\\)]; [print\\(r\\) for r in sorted\\(rules\\)]\")",
+      "Bash(python -c \"import subprocess; result = subprocess.run\\(['python', '-c', 'from static import style'], capture_output=True\\); print\\(len\\(open\\('static/style.css'\\).readlines\\(\\)\\), 'lines'\\)\")",
+      "Bash(wc -l static/style.css)",
+      "Bash(powershell -command \"\\(Get-Content static/style.css\\).Count\")"
+    ]
+  }
+}

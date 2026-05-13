@@ -72,6 +72,27 @@
                     </select>
                 </div>
 
+                <div class="field-group">
+                    <label for="data_prevista" class="field-label">
+                        Prazo previsto <span style="font-weight:400;color:var(--text-muted)">(opcional)</span>
+                    </label>
+                    <input type="date" id="data_prevista" name="data_prevista" value="{{ form_data.data_prevista }}">
+                    <p class="field-help">Define o SLA da demanda. Aparece nos indicadores de atraso do Dashboard.</p>
+                </div>
+
+                <div class="field-group">
+                    <label for="responsavel_id" class="field-label">
+                        Responsável pela execução <span style="font-weight:400;color:var(--text-muted)">(opcional)</span>
+                    </label>
+                    <select id="responsavel_id" name="responsavel_id">
+                        <option value="">Não atribuído</option>
+                        {% for u in usuarios %}
+                            <option value="{{ u.id }}">{{ u.nome }} (@{{ u.username }})</option>
+                        {% endfor %}
+                    </select>
+                    <p class="field-help">Quem irá executar esta demanda. Pode ser alterado depois.</p>
+                </div>
+
                 <div class="form-actions">
                     <button type="submit" class="btn btn--primary">Salvar demanda</button>
                     <a href="{{ url_for('index') }}" class="btn btn--secondary">Cancelar</a>

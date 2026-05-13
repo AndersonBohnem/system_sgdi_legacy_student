@@ -1,6 +1,7 @@
 # ── Aplicação principal ───────────────────────────────────────────────────────
 Flask>=3.1.0
 Werkzeug>=3.1.0         # hash de senhas (check_password_hash / generate_password_hash)
+openpyxl>=3.1.0         # exportação de relatórios Excel (.xlsx)
 
 # ── Testes automatizados e screenshots ───────────────────────────────────────
 playwright>=1.44.0      # automação de browser (screenshot_test.py / test_report.py)

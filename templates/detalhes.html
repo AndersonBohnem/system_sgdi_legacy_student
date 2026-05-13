@@ -27,7 +27,7 @@
                     <div class="chip-row">
                         <span class="chip chip--id">#{{ demanda['id'] }}</span>
                         <span class="chip chip--{{ demanda['prioridade']|priority_slug }}">{{ demanda['prioridade'] }}</span>
-                        <span class="chip {% if demanda['status'] == 'Aberta' %}chip--open{% else %}chip--done{% endif %}">
+                        <span class="chip {% if demanda['status'] == 'Aberta' %}chip--open{% elif demanda['status'] == 'Em andamento' %}chip--andamento{% elif demanda['status'] == 'Concluída' %}chip--done{% else %}chip--cancelada{% endif %}">
                             {{ demanda['status'] }}
                         </span>
                     </div>
@@ -132,6 +132,10 @@
                         </dd>
                     </div>
                     <div class="summary-item">
+                        <dt>Responsável</dt>
+                        <dd>{{ demanda['responsavel_nome'] or 'Não atribuído' }}</dd>
+                    </div>
+                    <div class="summary-item">
                         <dt>Criada em</dt>
                         <dd>{{ demanda['data_criacao']|display_datetime }}</dd>
                     </div>
@@ -142,7 +146,7 @@
                     <div class="summary-item">
                         <dt>Status</dt>
                         <dd>
-                            <span class="chip {% if demanda['status'] == 'Aberta' %}chip--open{% else %}chip--done{% endif %}">
+                            <span class="chip {% if demanda['status'] == 'Aberta' %}chip--open{% elif demanda['status'] == 'Em andamento' %}chip--andamento{% elif demanda['status'] == 'Concluída' %}chip--done{% else %}chip--cancelada{% endif %}">
                                 {{ demanda['status'] }}
                             </span>
                         </dd>
@@ -162,9 +166,30 @@
                         {% if eh_solicitante %}
                             <a href="{{ url_for('editar', id=demanda['id']) }}" class="btn btn--secondary btn--block">Editar demanda</a>
                         {% endif %}
+                        <form method="POST" action="{{ url_for('andamento', id=demanda['id']) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="btn btn--primary btn--block">Iniciar andamento</button>
+                        </form>
                         <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <button type="submit" class="btn btn--soft btn--block">Concluir demanda</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('cancelar', id=demanda['id']) }}" onsubmit="return confirm('Cancelar esta demanda?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="btn btn--secondary btn--block">Cancelar demanda</button>
+                        </form>
+                    {% elif demanda['status'] == 'Em andamento' %}
+                        <form method="POST" action="{{ url_for('concluir', id=demanda['id']) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="btn btn--soft btn--block">Concluir demanda</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('cancelar', id=demanda['id']) }}" onsubmit="return confirm('Cancelar esta demanda?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="btn btn--secondary btn--block">Cancelar demanda</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('reabrir', id=demanda['id']) }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="btn btn--soft btn--block">Reabrir demanda</button>
                         </form>
                     {% else %}
                         <form method="POST" action="{{ url_for('reabrir', id=demanda['id']) }}">
@@ -182,6 +207,38 @@
 
                     <a href="{{ url_for(rota_voltar) }}" class="btn btn--secondary btn--block">Voltar à lista</a>
                 </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card__header">
+                <h2>Histórico de status</h2>
+                <p>Todas as transições registradas automaticamente.</p>
+            </div>
+            <div class="card__body">
+                {% if historico %}
+                    <ol class="status-timeline">
+                        {% for h in historico %}
+                            <li class="status-timeline__item">
+                                <span class="status-timeline__dot"></span>
+                                <div class="status-timeline__transition">
+                                    {% if h['status_anterior'] %}
+                                        <span class="chip chip--sm chip--muted">{{ h['status_anterior'] }}</span>
+                                        <span style="font-size:0.75rem;color:var(--text-muted)">→</span>
+                                    {% endif %}
+                                    <span class="chip chip--sm {% if h['status_novo'] == 'Aberta' %}chip--open{% elif h['status_novo'] == 'Em andamento' %}chip--andamento{% elif h['status_novo'] == 'Concluída' %}chip--done{% else %}chip--cancelada{% endif %}">
+                                        {{ h['status_novo'] }}
+                                    </span>
+                                </div>
+                                <div class="status-timeline__meta">
+                                    <span>{{ h['autor'] }}</span>
+                                    <span>{{ h['data']|display_datetime }}</span>
+                                </div>
+                            </li>
+                        {% endfor %}
+                    </ol>
+                {% else %}
+                    <p style="font-size:0.82rem;color:var(--text-muted)">Nenhuma transição registrada ainda.</p>
+                {% endif %}
             </div>
         </div>
     </aside>
