@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1>API Keys</h1>
+        <p class="page-header__sub">Chaves de acesso para integração com sistemas externos via API REST.</p>
+    </div>
+    <div class="page-header__actions">
+        <a href="/apidocs" target="_blank" class="btn btn--outline">Ver documentação Swagger</a>
+    </div>
+</div>
+
+<div class="content-grid">
+    <div class="card">
+        <div class="card__header">
+            <h2>Gerar nova chave</h2>
+            <p>Cada chave identifica um sistema externo. Use descrições claras.</p>
+        </div>
+        <div class="card__body">
+            <form method="POST" action="{{ url_for('api_keys') }}" class="form-layout">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="acao" value="criar">
+                <div class="field-group">
+                    <label for="descricao" class="field-label">Descrição da chave</label>
+                    <input type="text" id="descricao" name="descricao"
+                           placeholder="Ex: Integração ERP, App Mobile, Script de relatório"
+                           maxlength="100" required>
+                    <p class="field-help">Identifica qual sistema está usando esta chave. Não pode ser alterada depois.</p>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn--primary">Gerar chave</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="side-stack">
+        <div class="card">
+            <div class="card__header">
+                <h2>Como usar</h2>
+                <p>Inclua o header em toda requisição.</p>
+            </div>
+            <div class="card__body">
+                <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:10px">
+                    Adicione o header <code style="background:var(--surface-raised);padding:2px 5px;border-radius:4px">X-API-Key</code> em cada chamada:
+                </p>
+                <pre style="background:var(--surface-raised);padding:12px;border-radius:6px;font-size:0.78rem;overflow-x:auto;color:var(--text-body)">GET /api/v1/demandas
+Host: localhost:5000
+X-API-Key: sua-chave-aqui</pre>
+                <p style="font-size:0.82rem;color:var(--text-muted);margin-top:10px">
+                    Consulte todos os endpoints disponíveis na
+                    <a href="/apidocs" target="_blank" style="color:var(--primary)">documentação Swagger</a>.
+                </p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__header">
+                <h2>Endpoints disponíveis</h2>
+                <p>API REST v1</p>
+            </div>
+            <div class="card__body">
+                <ul style="display:grid;gap:6px;font-size:0.82rem">
+                    <li><span style="color:var(--primary);font-weight:600">GET</span> /api/v1/demandas</li>
+                    <li><span style="color:var(--success);font-weight:600">POST</span> /api/v1/demandas</li>
+                    <li><span style="color:var(--primary);font-weight:600">GET</span> /api/v1/demandas/&#123;id&#125;</li>
+                    <li><span style="color:var(--warning);font-weight:600">PATCH</span> /api/v1/demandas/&#123;id&#125;/status</li>
+                    <li><span style="color:var(--primary);font-weight:600">GET</span> /api/v1/demandas/&#123;id&#125;/comentarios</li>
+                    <li><span style="color:var(--success);font-weight:600">POST</span> /api/v1/demandas/&#123;id&#125;/comentarios</li>
+                    <li><span style="color:var(--primary);font-weight:600">GET</span> /api/v1/usuarios</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-top:24px">
+    <div class="card__header">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div>
+                <h2>Chaves cadastradas</h2>
+                <p>Revogue chaves de sistemas que não precisam mais de acesso.</p>
+            </div>
+            <span class="chip chip--id">{{ keys|length }} chave(s)</span>
+        </div>
+    </div>
+    <div class="card__body" style="overflow-x:auto">
+        {% if keys %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Descrição</th>
+                    <th>Chave (mascarada)</th>
+                    <th>Criada por</th>
+                    <th>Criada em</th>
+                    <th>Status</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for k in keys %}
+                <tr>
+                    <td>{{ k.id }}</td>
+                    <td><strong>{{ k.descricao }}</strong></td>
+                    <td>
+                        <code style="font-size:0.78rem;background:var(--surface-raised);
+                                     padding:2px 6px;border-radius:4px;color:var(--text-muted)">
+                            {{ k.chave_mascarada }}
+                        </code>
+                    </td>
+                    <td>{{ k.criado_por_nome or '—' }}</td>
+                    <td>{{ k.criado_em|display_datetime }}</td>
+                    <td>
+                        {% if k.ativo %}
+                            <span class="chip chip--open" style="font-size:0.75rem">Ativa</span>
+                        {% else %}
+                            <span class="chip chip--cancelada" style="font-size:0.75rem">Revogada</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if k.ativo %}
+                        <form method="POST" action="{{ url_for('api_keys') }}"
+                              onsubmit="return confirm('Revogar esta chave? Sistemas que a usam perderão acesso imediatamente.')">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="acao" value="revogar">
+                            <input type="hidden" name="key_id" value="{{ k.id }}">
+                            <button type="submit" class="btn btn--danger btn--sm">Revogar</button>
+                        </form>
+                        {% else %}
+                            <span style="font-size:0.82rem;color:var(--text-muted)">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state" style="padding:32px 16px">
+            <h3>Nenhuma chave cadastrada.</h3>
+            <p>Gere a primeira chave para começar a integrar sistemas externos.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

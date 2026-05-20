@@ -5,6 +5,8 @@ from datetime import datetime
 from functools import wraps
 import os
 
+from flasgger import Swagger
+
 from flask import (
     Flask,
     Response,
@@ -39,6 +41,36 @@ from database import (
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "sgdi-dev-key-troque-em-producao-2024")
 
+Swagger(app, template={
+    "swagger": "2.0",
+    "info": {
+        "title": "SGDI API",
+        "description": (
+            "API REST para integração com o Sistema de Gestão de Demandas Internas.\n\n"
+            "**Autenticação:** inclua o header `X-API-Key` em todas as requisições.\n"
+            "Gere sua chave em `/api/keys` (login necessário)."
+        ),
+        "version": "1.0.0",
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+    },
+    "security": [{"ApiKeyAuth": []}],
+    "tags": [
+        {"name": "Demandas", "description": "Consulta e manipulação de demandas"},
+        {"name": "Usuários",  "description": "Listagem de usuários ativos"},
+        {"name": "Comentários", "description": "Comentários em demandas"},
+    ],
+}, config={
+    "headers": [],
+    "specs": [{"endpoint": "apispec", "route": "/apispec.json",
+               "rule_filter": lambda r: r.rule.startswith("/api/v1"),
+               "model_filter": lambda t: True}],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/apidocs",
+})
+
 ORDENACOES = {
     "prioridade": f"{PRIORIDADE_ORDEM_SQL}, d.data_criacao DESC",
     "recentes": "d.data_criacao DESC",
@@ -60,6 +92,36 @@ def login_required(f):
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated
+
+
+def api_key_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        chave = request.headers.get("X-API-Key", "").strip()
+        if not chave:
+            return jsonify({"success": False, "error": "Header X-API-Key ausente"}), 401
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT id FROM api_keys WHERE chave = ? AND ativo = 1", (chave,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if not row:
+            return jsonify({"success": False, "error": "Chave de API inválida ou desativada"}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
+def _api_ok(data, total=None):
+    payload = {"success": True, "data": data}
+    if total is not None:
+        payload["meta"] = {"total": total}
+    return jsonify(payload)
+
+
+def _api_err(msg, status):
+    return jsonify({"success": False, "error": msg}), status
 
 
 @app.context_processor
@@ -1560,6 +1622,456 @@ def _export_pdf(rows, now_str, filter_desc, filter_labels):
         as_attachment=True,
         download_name="demandas_dashboard.pdf",
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Gestão de API Keys (interface web — login obrigatório)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/keys", methods=["GET", "POST"])
+@login_required
+def api_keys():
+    conn = get_db()
+    try:
+        if request.method == "POST":
+            _validate_csrf()
+            acao = request.form.get("acao")
+
+            if acao == "criar":
+                descricao = request.form.get("descricao", "").strip()
+                if not descricao:
+                    flash("Informe uma descrição para a chave.")
+                    return redirect(url_for("api_keys"))
+                nova_chave = secrets.token_urlsafe(32)
+                conn.execute(
+                    "INSERT INTO api_keys (chave, descricao, criado_por) VALUES (?, ?, ?)",
+                    (nova_chave, descricao, session["usuario_id"]),
+                )
+                conn.commit()
+                flash(f"Chave gerada: {nova_chave} — copie agora, não será exibida novamente.")
+
+            elif acao == "revogar":
+                key_id = request.form.get("key_id")
+                conn.execute("UPDATE api_keys SET ativo = 0 WHERE id = ?", (key_id,))
+                conn.commit()
+                flash("Chave revogada com sucesso.")
+
+            return redirect(url_for("api_keys"))
+
+        keys = conn.execute(
+            """
+            SELECT k.id, k.descricao, k.ativo, k.criado_em,
+                   SUBSTR(k.chave, 1, 8) || '••••••••••••••••••••••••••••••' as chave_mascarada,
+                   u.nome as criado_por_nome
+            FROM api_keys k
+            LEFT JOIN usuarios u ON u.id = k.criado_por
+            ORDER BY k.criado_em DESC
+            """
+        ).fetchall()
+        return render_template("api_keys.html", keys=keys)
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# API REST Externa v1 — autenticação por X-API-Key
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/v1/demandas", methods=["GET"])
+@api_key_required
+def api_v1_demandas_list():
+    """
+    Lista todas as demandas com filtros opcionais.
+    ---
+    tags: [Demandas]
+    parameters:
+      - name: status
+        in: query
+        type: string
+        enum: [Aberta, Em andamento, Concluída, Cancelada]
+        description: Filtrar por status
+      - name: prioridade
+        in: query
+        type: string
+        enum: [Crítica, Alta, Média, Baixa]
+        description: Filtrar por prioridade
+      - name: responsavel_id
+        in: query
+        type: integer
+        description: Filtrar por ID do responsável
+      - name: limit
+        in: query
+        type: integer
+        default: 50
+        description: Máximo de registros retornados (máx. 200)
+      - name: offset
+        in: query
+        type: integer
+        default: 0
+        description: Paginação — número de registros a pular
+    responses:
+      200:
+        description: Lista de demandas
+        schema:
+          properties:
+            success: {type: boolean}
+            data:
+              type: array
+              items:
+                properties:
+                  id: {type: integer}
+                  titulo: {type: string}
+                  status: {type: string}
+                  prioridade: {type: string}
+                  solicitante: {type: string}
+                  responsavel: {type: string}
+                  data_criacao: {type: string}
+                  data_prevista: {type: string}
+            meta:
+              properties:
+                total: {type: integer}
+      401:
+        description: Header X-API-Key ausente
+      403:
+        description: Chave inválida ou desativada
+    """
+    status     = request.args.get("status", "").strip()
+    prioridade = request.args.get("prioridade", "").strip()
+    resp_id    = request.args.get("responsavel_id", "").strip()
+    try:
+        limit  = min(int(request.args.get("limit",  50)), 200)
+        offset = max(int(request.args.get("offset",  0)),   0)
+    except ValueError:
+        return _api_err("Parâmetros limit/offset devem ser inteiros", 400)
+
+    clauses, params = [], []
+    if status:
+        clauses.append("d.status = ?"); params.append(status)
+    if prioridade:
+        clauses.append("d.prioridade = ?"); params.append(prioridade)
+    if resp_id:
+        clauses.append("d.responsavel_id = ?"); params.append(resp_id)
+
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    conn = get_db()
+    try:
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM demandas d {where}", params
+        ).fetchone()[0]
+        rows = conn.execute(
+            f"""
+            SELECT d.id, d.titulo, d.descricao, d.status, d.prioridade,
+                   d.solicitante, d.data_criacao, d.data_prevista, d.data_conclusao,
+                   COALESCE(resp.nome, 'Não atribuído') as responsavel
+            FROM demandas d
+            LEFT JOIN usuarios resp ON resp.id = d.responsavel_id
+            {where}
+            ORDER BY {PRIORIDADE_ORDEM_SQL}, d.data_criacao DESC
+            LIMIT ? OFFSET ?
+            """,
+            params + [limit, offset],
+        ).fetchall()
+        return _api_ok([dict(r) for r in rows], total=total)
+    finally:
+        conn.close()
+
+
+@app.route("/api/v1/demandas", methods=["POST"])
+@api_key_required
+def api_v1_demandas_create():
+    """
+    Cria uma nova demanda.
+    ---
+    tags: [Demandas]
+    consumes: [application/json]
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          required: [titulo, descricao, solicitante, prioridade]
+          properties:
+            titulo:
+              type: string
+              example: Falha no módulo de relatórios
+            descricao:
+              type: string
+              example: O módulo trava ao gerar relatórios com mais de 1000 linhas.
+            solicitante:
+              type: string
+              example: Sistema ERP
+            prioridade:
+              type: string
+              enum: [Crítica, Alta, Média, Baixa]
+              example: Alta
+            responsavel_id:
+              type: integer
+              example: 2
+            data_prevista:
+              type: string
+              example: "2026-06-30"
+    responses:
+      201:
+        description: Demanda criada com sucesso
+      400:
+        description: Dados inválidos ou campos obrigatórios ausentes
+    """
+    body = request.get_json(silent=True) or {}
+    titulo      = (body.get("titulo")     or "").strip()
+    descricao   = (body.get("descricao")  or "").strip()
+    solicitante = (body.get("solicitante") or "").strip()
+    prioridade  = (body.get("prioridade") or "").strip()
+    responsavel_id  = body.get("responsavel_id")
+    data_prevista   = (body.get("data_prevista") or "").strip() or None
+
+    if not all([titulo, descricao, solicitante, prioridade]):
+        return _api_err("Campos obrigatórios: titulo, descricao, solicitante, prioridade", 400)
+    if prioridade not in PRIORIDADES:
+        return _api_err(f"prioridade inválida. Use: {', '.join(PRIORIDADES)}", 400)
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_db()
+    try:
+        cursor = conn.execute(
+            """INSERT INTO demandas
+               (titulo, descricao, solicitante, usuario_id, prioridade,
+                status, data_criacao, data_prevista, responsavel_id)
+               VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)""",
+            (titulo, descricao, solicitante, prioridade,
+             STATUS_ABERTA, now, data_prevista, responsavel_id),
+        )
+        demanda_id = cursor.lastrowid
+        conn.execute(
+            "INSERT INTO historico_status (demanda_id, status_anterior, status_novo, autor, data) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (demanda_id, None, STATUS_ABERTA, f"API/{solicitante}", now),
+        )
+        conn.commit()
+        return _api_ok({"id": demanda_id, "status": STATUS_ABERTA}), 201
+    finally:
+        conn.close()
+
+
+@app.route("/api/v1/demandas/<int:id>", methods=["GET"])
+@api_key_required
+def api_v1_demandas_get(id):
+    """
+    Retorna os detalhes de uma demanda específica.
+    ---
+    tags: [Demandas]
+    parameters:
+      - name: id
+        in: path
+        type: integer
+        required: true
+        description: ID da demanda
+    responses:
+      200:
+        description: Detalhes da demanda
+      404:
+        description: Demanda não encontrada
+    """
+    conn = get_db()
+    try:
+        row = conn.execute(
+            """
+            SELECT d.id, d.titulo, d.descricao, d.status, d.prioridade,
+                   d.solicitante, d.data_criacao, d.data_prevista, d.data_conclusao,
+                   COALESCE(resp.nome, 'Não atribuído') as responsavel,
+                   u.nome as solicitante_usuario
+            FROM demandas d
+            LEFT JOIN usuarios resp ON resp.id = d.responsavel_id
+            LEFT JOIN usuarios u   ON u.id   = d.usuario_id
+            WHERE d.id = ?
+            """,
+            (id,),
+        ).fetchone()
+        if not row:
+            return _api_err("Demanda não encontrada", 404)
+        return _api_ok(dict(row))
+    finally:
+        conn.close()
+
+
+@app.route("/api/v1/demandas/<int:id>/status", methods=["PATCH"])
+@api_key_required
+def api_v1_demandas_status(id):
+    """
+    Atualiza o status de uma demanda.
+    ---
+    tags: [Demandas]
+    consumes: [application/json]
+    parameters:
+      - name: id
+        in: path
+        type: integer
+        required: true
+      - in: body
+        name: body
+        required: true
+        schema:
+          required: [status]
+          properties:
+            status:
+              type: string
+              enum: [Aberta, Em andamento, Concluída, Cancelada]
+              example: Em andamento
+            autor:
+              type: string
+              example: Sistema ERP
+    responses:
+      200:
+        description: Status atualizado com sucesso
+      400:
+        description: Status inválido
+      404:
+        description: Demanda não encontrada
+    """
+    body   = request.get_json(silent=True) or {}
+    novo   = (body.get("status") or "").strip()
+    autor  = (body.get("autor")  or "API").strip()
+
+    if novo not in TODOS_STATUS:
+        return _api_err(f"Status inválido. Use: {', '.join(TODOS_STATUS)}", 400)
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT status FROM demandas WHERE id = ?", (id,)).fetchone()
+        if not row:
+            return _api_err("Demanda não encontrada", 404)
+        anterior = row["status"]
+        conclusao = now if novo == STATUS_CONCLUIDA else None
+        conn.execute(
+            "UPDATE demandas SET status = ?, data_conclusao = COALESCE(?, data_conclusao) WHERE id = ?",
+            (novo, conclusao, id),
+        )
+        conn.execute(
+            "INSERT INTO historico_status (demanda_id, status_anterior, status_novo, autor, data) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (id, anterior, novo, autor, now),
+        )
+        conn.commit()
+        return _api_ok({"id": id, "status_anterior": anterior, "status_novo": novo})
+    finally:
+        conn.close()
+
+
+@app.route("/api/v1/demandas/<int:id>/comentarios", methods=["GET"])
+@api_key_required
+def api_v1_comentarios_list(id):
+    """
+    Lista os comentários de uma demanda.
+    ---
+    tags: [Comentários]
+    parameters:
+      - name: id
+        in: path
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Lista de comentários
+      404:
+        description: Demanda não encontrada
+    """
+    conn = get_db()
+    try:
+        if not conn.execute("SELECT 1 FROM demandas WHERE id = ?", (id,)).fetchone():
+            return _api_err("Demanda não encontrada", 404)
+        rows = conn.execute(
+            "SELECT id, autor, comentario, data FROM comentarios WHERE demanda_id = ? ORDER BY data",
+            (id,),
+        ).fetchall()
+        return _api_ok([dict(r) for r in rows], total=len(rows))
+    finally:
+        conn.close()
+
+
+@app.route("/api/v1/demandas/<int:id>/comentarios", methods=["POST"])
+@api_key_required
+def api_v1_comentarios_create(id):
+    """
+    Adiciona um comentário a uma demanda.
+    ---
+    tags: [Comentários]
+    consumes: [application/json]
+    parameters:
+      - name: id
+        in: path
+        type: integer
+        required: true
+      - in: body
+        name: body
+        required: true
+        schema:
+          required: [autor, comentario]
+          properties:
+            autor:
+              type: string
+              example: Sistema ERP
+            comentario:
+              type: string
+              example: Demanda recebida e em análise pelo time de integração.
+    responses:
+      201:
+        description: Comentário adicionado
+      400:
+        description: Campos obrigatórios ausentes
+      404:
+        description: Demanda não encontrada
+    """
+    body = request.get_json(silent=True) or {}
+    autor      = (body.get("autor")      or "").strip()
+    comentario = (body.get("comentario") or "").strip()
+
+    if not autor or not comentario:
+        return _api_err("Campos obrigatórios: autor, comentario", 400)
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_db()
+    try:
+        if not conn.execute("SELECT 1 FROM demandas WHERE id = ?", (id,)).fetchone():
+            return _api_err("Demanda não encontrada", 404)
+        cursor = conn.execute(
+            "INSERT INTO comentarios (demanda_id, comentario, autor, data) VALUES (?, ?, ?, ?)",
+            (id, comentario, autor, now),
+        )
+        conn.commit()
+        return _api_ok({"id": cursor.lastrowid}), 201
+    finally:
+        conn.close()
+
+
+@app.route("/api/v1/usuarios", methods=["GET"])
+@api_key_required
+def api_v1_usuarios_list():
+    """
+    Lista os usuários ativos do sistema.
+    ---
+    tags: [Usuários]
+    responses:
+      200:
+        description: Lista de usuários
+        schema:
+          properties:
+            success: {type: boolean}
+            data:
+              type: array
+              items:
+                properties:
+                  id: {type: integer}
+                  username: {type: string}
+                  nome: {type: string}
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, username, nome FROM usuarios ORDER BY nome"
+        ).fetchall()
+        return _api_ok([dict(r) for r in rows], total=len(rows))
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

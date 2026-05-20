@@ -120,6 +120,19 @@ def _create_tables(conn):
         """
     )
 
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            chave      TEXT NOT NULL UNIQUE,
+            descricao  TEXT NOT NULL,
+            criado_por INTEGER REFERENCES usuarios(id),
+            ativo      INTEGER NOT NULL DEFAULT 1,
+            criado_em  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        )
+        """
+    )
+
 
 def _seed_users(conn):
     for u in USUARIOS_FIXOS:

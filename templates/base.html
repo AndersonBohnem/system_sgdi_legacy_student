@@ -36,6 +36,10 @@
                     Dashboard
                     <span class="nav-alert-badge" id="nav-alert-badge" style="display:none"></span>
                 </a>
+                <a href="{{ url_for('api_keys') }}"
+                   class="navbar__link {% if request.endpoint == 'api_keys' %}is-active{% endif %}">
+                    API Keys
+                </a>
             </div>
 
             <div class="navbar__end">
