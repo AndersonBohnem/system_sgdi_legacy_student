@@ -56,12 +56,20 @@ def initialize_database(seed=False):
         _create_tables(conn)
         _seed_users(conn)
         _migrate_demands(conn)
+        _migrate_logs(conn)
         _cleanup_legacy_demands(conn)
         seeded = _seed_sample_data(conn) if seed else False
         conn.commit()
         return seeded
     finally:
         conn.close()
+
+
+def _migrate_logs(conn):
+    """Adiciona colunas novas à tabela logs_sistema se ainda não existirem."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(logs_sistema)").fetchall()}
+    if "session_id" not in cols:
+        conn.execute("ALTER TABLE logs_sistema ADD COLUMN session_id TEXT")
 
 
 def _create_tables(conn):
@@ -131,6 +139,39 @@ def _create_tables(conn):
             criado_em  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
         )
         """
+    )
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS logs_sistema (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp      TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            nivel          TEXT NOT NULL DEFAULT 'INFO',
+            categoria      TEXT NOT NULL,
+            acao           TEXT NOT NULL,
+            usuario_id     INTEGER REFERENCES usuarios(id),
+            usuario_nome   TEXT,
+            ip             TEXT,
+            recurso_tipo   TEXT,
+            recurso_id     INTEGER,
+            detalhes       TEXT,
+            hash_anterior  TEXT,
+            hash_registro  TEXT
+        )
+        """
+    )
+    # Índices para consultas frequentes na página de auditoria
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_logs_timestamp  ON logs_sistema(timestamp)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_logs_categoria  ON logs_sistema(categoria)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_logs_nivel      ON logs_sistema(nivel)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_logs_usuario_id ON logs_sistema(usuario_id)"
     )
 
 

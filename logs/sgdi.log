@@ -1,0 +1,57 @@
+2026-05-26 19:56:25 | INFO     | AUTH         | teste_inicio               | user=Teste (id=1)         | ip=127.0.0.1        | {"msg": "teste de inicializacao"}
+2026-05-26 20:09:56 | INFO     | SISTEMA      | sistema_iniciado             | user=anonimo                | ip=-                | sid=-        | {"versao": "2.0", "integridade_logs": true, "total_logs_verificados": 2, "falhas_hash": 0}
+2026-05-26 20:20:11 | INFO     | SISTEMA      | sistema_iniciado             | user=anonimo                | ip=-                | sid=-        | {"versao": "2.0", "integridade_logs": true, "total_logs_verificados": 3, "falhas_hash": 0}
+2026-05-26 20:20:40 | INFO     | AUTH         | login_sucesso                | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:20:52 | INFO     | DEMANDA      | demanda_criada               | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"titulo": "Demanda criada pelo teste automatizado", "prioridade": "Alta", "responsavel_id": null, "data_prevista": null}
+2026-05-26 20:22:27 | INFO     | SISTEMA      | sistema_iniciado             | user=anonimo                | ip=-                | sid=-        | {"versao": "2.0", "integridade_logs": true, "total_logs_verificados": 6, "falhas_hash": 0}
+2026-05-26 20:23:53 | INFO     | SISTEMA      | sistema_iniciado             | user=anonimo                | ip=-                | sid=-        | {"versao": "2.0", "integridade_logs": true, "total_logs_verificados": 7, "falhas_hash": 0}
+2026-05-26 20:23:56 | INFO     | AUTH         | login_sucesso                | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:23:58 | INFO     | AUTH         | logout                       | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {}
+2026-05-26 20:24:00 | WARNING  | AUTH         | login_falha                  | user=anonimo                | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:24:01 | INFO     | AUTH         | login_sucesso                | user=João Silva(id=2)       | ip=127.0.0.1        | sid=-        | {"username": "joao.silva"}
+2026-05-26 20:24:03 | INFO     | AUTH         | logout                       | user=João Silva(id=2)       | ip=127.0.0.1        | sid=-        | {}
+2026-05-26 20:24:06 | INFO     | AUTH         | login_sucesso                | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:24:10 | INFO     | DEMANDA      | demanda_criada               | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"titulo": "Demanda criada pelo teste automatizado", "prioridade": "Alta", "responsavel_id": null, "data_prevista": null}
+2026-05-26 20:24:13 | INFO     | DEMANDA      | demanda_visualizada          | user=Administrador(id=1)    | ip=127.0.0.1        | sid=399a0da7 | {"prioridade": "Alta", "status": "Aberta"}
+2026-05-26 20:24:15 | INFO     | DEMANDA      | comentario_adicionado        | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"tamanho_chars": 46}
+2026-05-26 20:24:15 | INFO     | DEMANDA      | demanda_visualizada          | user=Administrador(id=1)    | ip=127.0.0.1        | sid=399a0da7 | {"prioridade": "Alta", "status": "Aberta"}
+2026-05-26 20:24:20 | INFO     | DEMANDA      | status_alterado              | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"de": "Aberta", "para": "Concluída"}
+2026-05-26 20:24:23 | INFO     | DEMANDA      | status_alterado              | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"de": "Concluída", "para": "Aberta"}
+2026-05-26 20:24:24 | INFO     | AUTH         | logout                       | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {}
+2026-05-26 20:24:26 | INFO     | AUTH         | login_sucesso                | user=João Silva(id=2)       | ip=127.0.0.1        | sid=-        | {"username": "joao.silva"}
+2026-05-26 20:24:29 | INFO     | DEMANDA      | demanda_visualizada          | user=João Silva(id=2)       | ip=127.0.0.1        | sid=0a346748 | {"prioridade": "Alta", "status": "Aberta"}
+2026-05-26 20:24:31 | INFO     | DEMANDA      | demanda_visualizada          | user=João Silva(id=2)       | ip=127.0.0.1        | sid=0a346748 | {"prioridade": "Crítica", "status": "Em andamento"}
+2026-05-26 20:24:32 | INFO     | AUTH         | logout                       | user=João Silva(id=2)       | ip=127.0.0.1        | sid=-        | {}
+2026-05-26 20:24:34 | INFO     | AUTH         | login_sucesso                | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:24:52 | INFO     | EXPORTACAO   | export_logs_realizado        | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"formato": "csv", "total_registros": 26, "filtros": {"nivel": "", "categoria": ""}}
+2026-05-26 20:24:54 | INFO     | EXPORTACAO   | export_logs_realizado        | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"formato": "xlsx", "total_registros": 27, "filtros": {"nivel": "", "categoria": ""}}
+2026-05-26 20:24:59 | INFO     | SISTEMA      | integridade_verificada       | user=Administrador(id=1)    | ip=127.0.0.1        | sid=e4a785e6 | {"integro": true, "total": 28, "n_falhas": 0}
+2026-05-26 20:25:21 | INFO     | SISTEMA      | sistema_iniciado             | user=anonimo                | ip=-                | sid=-        | {"versao": "2.0", "integridade_logs": true, "total_logs_verificados": 29, "falhas_hash": 0}
+2026-05-26 20:25:23 | INFO     | AUTH         | login_sucesso                | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:25:25 | INFO     | AUTH         | logout                       | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {}
+2026-05-26 20:25:27 | WARNING  | AUTH         | login_falha                  | user=anonimo                | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:25:28 | INFO     | AUTH         | login_sucesso                | user=João Silva(id=2)       | ip=127.0.0.1        | sid=-        | {"username": "joao.silva"}
+2026-05-26 20:25:30 | INFO     | AUTH         | logout                       | user=João Silva(id=2)       | ip=127.0.0.1        | sid=-        | {}
+2026-05-26 20:25:33 | INFO     | AUTH         | login_sucesso                | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:25:38 | INFO     | DEMANDA      | demanda_criada               | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"titulo": "Demanda criada pelo teste automatizado", "prioridade": "Alta", "responsavel_id": null, "data_prevista": null}
+2026-05-26 20:25:41 | INFO     | DEMANDA      | demanda_visualizada          | user=Administrador(id=1)    | ip=127.0.0.1        | sid=fa9b5939 | {"prioridade": "Alta", "status": "Aberta"}
+2026-05-26 20:25:42 | INFO     | DEMANDA      | comentario_adicionado        | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"tamanho_chars": 46}
+2026-05-26 20:25:42 | INFO     | DEMANDA      | demanda_visualizada          | user=Administrador(id=1)    | ip=127.0.0.1        | sid=fa9b5939 | {"prioridade": "Alta", "status": "Aberta"}
+2026-05-26 20:25:47 | INFO     | DEMANDA      | status_alterado              | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"de": "Aberta", "para": "Concluída"}
+2026-05-26 20:25:50 | INFO     | DEMANDA      | status_alterado              | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"de": "Concluída", "para": "Aberta"}
+2026-05-26 20:25:51 | INFO     | AUTH         | logout                       | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {}
+2026-05-26 20:25:53 | INFO     | AUTH         | login_sucesso                | user=João Silva(id=2)       | ip=127.0.0.1        | sid=-        | {"username": "joao.silva"}
+2026-05-26 20:25:56 | INFO     | DEMANDA      | demanda_visualizada          | user=João Silva(id=2)       | ip=127.0.0.1        | sid=ceedbe5c | {"prioridade": "Alta", "status": "Aberta"}
+2026-05-26 20:25:58 | INFO     | DEMANDA      | demanda_visualizada          | user=João Silva(id=2)       | ip=127.0.0.1        | sid=ceedbe5c | {"prioridade": "Crítica", "status": "Em andamento"}
+2026-05-26 20:25:59 | INFO     | AUTH         | logout                       | user=João Silva(id=2)       | ip=127.0.0.1        | sid=-        | {}
+2026-05-26 20:26:01 | INFO     | AUTH         | login_sucesso                | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:26:19 | INFO     | EXPORTACAO   | export_logs_realizado        | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"formato": "csv", "total_registros": 48, "filtros": {"nivel": "", "categoria": ""}}
+2026-05-26 20:26:21 | INFO     | EXPORTACAO   | export_logs_realizado        | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"formato": "xlsx", "total_registros": 49, "filtros": {"nivel": "", "categoria": ""}}
+2026-05-26 20:26:22 | INFO     | SISTEMA      | integridade_verificada       | user=Administrador(id=1)    | ip=127.0.0.1        | sid=76f19b21 | {"integro": true, "total": 50, "n_falhas": 0}
+2026-05-26 20:26:24 | INFO     | API_KEY      | api_key_criada               | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"descricao": "Chave criada pelo teste TS8"}
+2026-05-26 20:26:27 | INFO     | API          | api_chamada                  | user=anonimo                | ip=127.0.0.1        | sid=-        | {"endpoint": "GET /api/v1/demandas", "chave_desc": "Chave gerada pelo teste automatizado"}
+2026-05-26 20:26:29 | WARNING  | API          | api_chave_invalida           | user=anonimo                | ip=127.0.0.1        | sid=-        | {"endpoint": "GET /api/v1/demandas", "chave_usada": "chave-in••••"}
+2026-05-26 20:26:31 | WARNING  | API          | api_sem_chave                | user=anonimo                | ip=127.0.0.1        | sid=-        | {"endpoint": "GET /api/v1/demandas"}
+2026-05-26 20:26:33 | INFO     | API          | api_chamada                  | user=anonimo                | ip=127.0.0.1        | sid=-        | {"endpoint": "POST /api/v1/demandas", "chave_desc": "Chave gerada pelo teste automatizado"}
+2026-05-26 20:26:38 | INFO     | EXPORTACAO   | export_realizado             | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"formato": "csv", "total_registros": 28, "filtros": []}
+2026-05-26 20:26:39 | INFO     | AUTH         | login_sucesso                | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"username": "admin"}

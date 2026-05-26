@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-header">
+    <div>
+        <h1>Auditoria &amp; Logs</h1>
+        <p class="page-header__sub">Registro de todas as ações realizadas no sistema — {{ total }} evento(s) encontrado(s).</p>
+    </div>
+    <div class="page-header__actions" style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="{{ url_for('auditoria_export', **filtros) }}" class="btn btn--outline">
+            Exportar CSV
+        </a>
+        <a href="{{ url_for('auditoria_export', format='xlsx', **filtros) }}" class="btn btn--outline">
+            Exportar Excel
+        </a>
+        <button id="btn-metricas" class="btn btn--outline" onclick="toggleMetricas()">
+            📊 Métricas
+        </button>
+        <a href="/api/admin/integridade" id="btn-integridade" class="btn btn--outline" target="_blank"
+           title="Verificar integridade da cadeia de hashes dos logs">
+            🔒 Integridade
+        </a>
+    </div>
+</div>
+
+{# ── Painel de Métricas (colapsável) ──────────────────────────────────────── #}
+<div id="painel-metricas" style="display:none;margin-bottom:20px">
+    <div class="card">
+        <div class="card__body">
+            <h3 style="margin:0 0 16px;font-size:1rem;color:var(--text-body)">
+                Métricas dos Últimos 30 Dias
+                <span id="total-24h" style="font-size:0.82rem;font-weight:400;color:var(--text-muted);margin-left:12px"></span>
+            </h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:20px;align-items:start">
+                <div>
+                    <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 8px">Por Nível</p>
+                    <canvas id="chart-nivel" height="180"></canvas>
+                </div>
+                <div>
+                    <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 8px">Por Categoria</p>
+                    <canvas id="chart-cat" height="180"></canvas>
+                </div>
+                <div>
+                    <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 8px">Tendência Diária</p>
+                    <canvas id="chart-dia" height="180"></canvas>
+                </div>
+            </div>
+
+            {# Últimos erros #}
+            <div id="erros-recentes" style="margin-top:20px;display:none">
+                <p style="font-size:0.82rem;font-weight:600;color:#DC2626;margin:0 0 8px">
+                    Últimos eventos ERROR / CRITICAL
+                </p>
+                <table class="data-table" style="font-size:0.78rem" id="tbl-erros">
+                    <thead><tr>
+                        <th>Timestamp</th><th>Nível</th><th>Categoria</th>
+                        <th>Ação</th><th>Usuário</th><th>IP</th>
+                    </tr></thead>
+                    <tbody id="tbody-erros"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Contadores por nível ──────────────────────────────────────────────────── #}
+<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+    {% set nivel_styles = {
+        'INFO':     ('chip--open',     'INFO'),
+        'WARNING':  ('chip--andamento','WARNING'),
+        'ERROR':    ('chip--critica',  'ERROR'),
+        'CRITICAL': ('chip--cancelada','CRITICAL'),
+    } %}
+    {% for nivel_k, (cls, label) in nivel_styles.items() %}
+    <div class="kpi-card">
+        <div class="kpi-card__label">{{ label }}</div>
+        <div class="kpi-card__value">{{ contadores.get(nivel_k, 0) }}</div>
+        <span class="chip {{ cls }}" style="font-size:0.72rem;margin-top:4px">{{ nivel_k }}</span>
+    </div>
+    {% endfor %}
+</div>
+
+{# ── Contadores por categoria ─────────────────────────────────────────────── #}
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
+    {% for cat, cnt in por_categoria.items() %}
+    <a href="{{ url_for('auditoria', categoria=cat) }}"
+       style="text-decoration:none">
+        <span class="chip chip--id" style="font-size:0.78rem;cursor:pointer">
+            {{ cat }} <strong>{{ cnt }}</strong>
+        </span>
+    </a>
+    {% endfor %}
+</div>
+
+{# ── Filtros ──────────────────────────────────────────────────────────────── #}
+<div class="card" style="margin-bottom:20px">
+    <div class="card__body">
+        <form method="GET" action="{{ url_for('auditoria') }}"
+              style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+            <div class="field-group" style="min-width:120px;flex:1">
+                <label class="field-label">Nível</label>
+                <select name="nivel">
+                    <option value="">Todos</option>
+                    {% for n in niveis %}
+                    <option value="{{ n }}" {% if filtros.nivel == n %}selected{% endif %}>{{ n }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field-group" style="min-width:140px;flex:1">
+                <label class="field-label">Categoria</label>
+                <select name="categoria">
+                    <option value="">Todas</option>
+                    {% for c in categorias %}
+                    <option value="{{ c }}" {% if filtros.categoria == c %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field-group" style="min-width:160px;flex:2">
+                <label class="field-label">Usuário / IP</label>
+                <input type="text" name="usuario" placeholder="Nome ou endereço IP"
+                       value="{{ filtros.usuario }}">
+            </div>
+            <div class="field-group" style="min-width:140px;flex:1">
+                <label class="field-label">De</label>
+                <input type="date" name="data_ini" value="{{ filtros.data_ini }}">
+            </div>
+            <div class="field-group" style="min-width:140px;flex:1">
+                <label class="field-label">Até</label>
+                <input type="date" name="data_fim" value="{{ filtros.data_fim }}">
+            </div>
+            <div style="display:flex;gap:8px">
+                <button type="submit" class="btn btn--primary">Filtrar</button>
+                <a href="{{ url_for('auditoria') }}" class="btn btn--outline">Limpar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{# ── Tabela de logs ───────────────────────────────────────────────────────── #}
+<div class="card">
+    <div class="card__body" style="overflow-x:auto;padding:0">
+        {% if logs %}
+        <table class="data-table" style="font-size:0.82rem">
+            <thead>
+                <tr>
+                    <th style="width:140px">Timestamp</th>
+                    <th style="width:90px">Nível</th>
+                    <th style="width:110px">Categoria</th>
+                    <th style="width:180px">Ação</th>
+                    <th>Usuário</th>
+                    <th style="width:130px">IP</th>
+                    <th style="width:80px">Recurso</th>
+                    <th>Detalhes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in logs %}
+                {% set nivel_row = entry['nivel'] %}
+                {% set row_bg = {
+                    'CRITICAL': 'background:#fff5f5',
+                    'ERROR':    'background:#fff5f5',
+                    'WARNING':  'background:#fffbeb',
+                }.get(nivel_row, '') %}
+                <tr style="{{ row_bg }}">
+                    <td style="font-family:monospace;white-space:nowrap;color:var(--text-muted)">
+                        {{ entry['timestamp'] }}
+                    </td>
+                    <td>
+                        {% if nivel_row == 'CRITICAL' %}
+                            <span class="chip chip--cancelada" style="font-size:0.70rem">CRITICAL</span>
+                        {% elif nivel_row == 'ERROR' %}
+                            <span class="chip chip--critica" style="font-size:0.70rem">ERROR</span>
+                        {% elif nivel_row == 'WARNING' %}
+                            <span class="chip chip--andamento" style="font-size:0.70rem">WARNING</span>
+                        {% else %}
+                            <span class="chip chip--open" style="font-size:0.70rem">INFO</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="chip chip--id" style="font-size:0.70rem">{{ entry['categoria'] }}</span>
+                    </td>
+                    <td style="font-family:monospace;font-weight:600;color:var(--text-body)">
+                        {{ entry['acao'] }}
+                    </td>
+                    <td style="color:var(--text-body)">
+                        {% if entry['usuario_nome'] %}
+                            <span class="avatar avatar--sm" style="font-size:0.65rem;width:20px;height:20px">
+                                {{ entry['usuario_nome'][0] }}
+                            </span>
+                            {{ entry['usuario_nome'] }}
+                        {% else %}
+                            <span style="color:var(--text-muted)">anônimo</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-family:monospace;font-size:0.78rem;color:var(--text-muted)">
+                        {{ entry['ip'] or '—' }}
+                    </td>
+                    <td style="font-size:0.78rem">
+                        {% if entry['recurso_tipo'] %}
+                            <span style="color:var(--primary)">{{ entry['recurso_tipo'] }}</span>
+                            {% if entry['recurso_id'] %}
+                                <span style="color:var(--text-muted)">#{{ entry['recurso_id'] }}</span>
+                            {% endif %}
+                        {% else %}
+                            <span style="color:var(--text-muted)">—</span>
+                        {% endif %}
+                    </td>
+                    <td style="max-width:260px">
+                        {% if entry['detalhes'] and entry['detalhes'] != '{}' %}
+                        <details>
+                            <summary style="cursor:pointer;font-size:0.78rem;color:var(--primary)">
+                                ver detalhes
+                            </summary>
+                            <pre style="font-size:0.72rem;background:var(--surface-raised);
+                                        padding:6px;border-radius:4px;margin-top:4px;
+                                        white-space:pre-wrap;word-break:break-all;
+                                        max-height:120px;overflow-y:auto">{{ entry['detalhes'] }}</pre>
+                        </details>
+                        {% else %}
+                            <span style="color:var(--text-muted);font-size:0.78rem">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {# ── Paginação ──────────────────────────────────────────────────────── #}
+        {% if total_paginas > 1 %}
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:12px 16px;border-top:1px solid var(--border)">
+            <span style="font-size:0.82rem;color:var(--text-muted)">
+                Página {{ pagina }} de {{ total_paginas }} — {{ total }} registro(s)
+            </span>
+            <div style="display:flex;gap:6px">
+                {% if pagina > 1 %}
+                <a href="{{ url_for('auditoria', pagina=pagina-1, **filtros) }}"
+                   class="btn btn--outline btn--sm">&laquo; Anterior</a>
+                {% endif %}
+                {% for p in range([1, pagina-2]|max, [total_paginas+1, pagina+3]|min) %}
+                <a href="{{ url_for('auditoria', pagina=p, **filtros) }}"
+                   class="btn {% if p == pagina %}btn--primary{% else %}btn--outline{% endif %} btn--sm">
+                    {{ p }}
+                </a>
+                {% endfor %}
+                {% if pagina < total_paginas %}
+                <a href="{{ url_for('auditoria', pagina=pagina+1, **filtros) }}"
+                   class="btn btn--outline btn--sm">Próxima &raquo;</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state" style="padding:40px 16px">
+            <h3>Nenhum evento registrado com os filtros aplicados.</h3>
+            <p>Tente ampliar o intervalo de datas ou remover os filtros.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+var _chartNivel = null, _chartCat = null, _chartDia = null;
+var _metricasCarregadas = false;
+
+function toggleMetricas() {
+    var painel = document.getElementById('painel-metricas');
+    if (painel.style.display === 'none') {
+        painel.style.display = 'block';
+        if (!_metricasCarregadas) carregarMetricas();
+    } else {
+        painel.style.display = 'none';
+    }
+}
+
+function carregarMetricas() {
+    fetch('/api/auditoria/metricas')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            _metricasCarregadas = true;
+
+            // Total 24h
+            var el24 = document.getElementById('total-24h');
+            if (el24) el24.textContent = d.total_24h + ' eventos nas últimas 24h';
+
+            // Chart por nível
+            var nivelLabels = ['INFO','WARNING','ERROR','CRITICAL'];
+            var nivelColors = ['#3B82F6','#F59E0B','#EF4444','#7C3AED'];
+            var nivelVals   = nivelLabels.map(function(n){ return d.por_nivel[n] || 0; });
+            if (_chartNivel) _chartNivel.destroy();
+            _chartNivel = new Chart(document.getElementById('chart-nivel'), {
+                type: 'doughnut',
+                data: {
+                    labels: nivelLabels,
+                    datasets: [{ data: nivelVals, backgroundColor: nivelColors, borderWidth: 2 }]
+                },
+                options: {
+                    plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
+                    cutout: '55%'
+                }
+            });
+
+            // Chart por categoria
+            if (_chartCat) _chartCat.destroy();
+            _chartCat = new Chart(document.getElementById('chart-cat'), {
+                type: 'bar',
+                data: {
+                    labels: d.por_categoria.map(function(c){ return c.label; }),
+                    datasets: [{
+                        label: 'Eventos',
+                        data: d.por_categoria.map(function(c){ return c.total; }),
+                        backgroundColor: '#2563EB',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: '#f1f5f9' } },
+                        y: { ticks: { font: { size: 10 } } }
+                    }
+                }
+            });
+
+            // Chart tendência diária
+            if (_chartDia) _chartDia.destroy();
+            _chartDia = new Chart(document.getElementById('chart-dia'), {
+                type: 'line',
+                data: {
+                    labels: d.por_dia.map(function(p){ return p.dia; }),
+                    datasets: [{
+                        label: 'Eventos/dia',
+                        data: d.por_dia.map(function(p){ return p.total; }),
+                        borderColor: '#2563EB',
+                        backgroundColor: 'rgba(37,99,235,0.08)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { font: { size: 9 }, maxRotation: 45 } },
+                        y: { grid: { color: '#f1f5f9' }, beginAtZero: true }
+                    }
+                }
+            });
+
+            // Últimos erros
+            if (d.erros_recentes && d.erros_recentes.length > 0) {
+                var tbody = document.getElementById('tbody-erros');
+                tbody.innerHTML = '';
+                d.erros_recentes.forEach(function(e) {
+                    var bg = e.nivel === 'CRITICAL' ? 'background:#fff5f5' : '';
+                    var tr = '<tr style="' + bg + '">'
+                        + '<td style="font-family:monospace;white-space:nowrap;font-size:0.75rem">' + e.timestamp + '</td>'
+                        + '<td><span class="chip chip--critica" style="font-size:0.68rem">' + e.nivel + '</span></td>'
+                        + '<td><span class="chip chip--id" style="font-size:0.68rem">' + e.categoria + '</span></td>'
+                        + '<td style="font-family:monospace;font-size:0.75rem">' + e.acao + '</td>'
+                        + '<td>' + e.usuario_nome + '</td>'
+                        + '<td style="font-family:monospace;font-size:0.75rem">' + e.ip + '</td>'
+                        + '</tr>';
+                    tbody.innerHTML += tr;
+                });
+                document.getElementById('erros-recentes').style.display = 'block';
+            }
+        })
+        .catch(function(err) {
+            console.error('Erro ao carregar métricas:', err);
+        });
+}
+</script>
+{% endblock %}

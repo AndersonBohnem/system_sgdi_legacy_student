@@ -1,11 +1,25 @@
+import collections
 import csv
 import io
 import secrets
+import threading
+import time
 from datetime import datetime
 from functools import wraps
 import os
 
 from flasgger import Swagger
+import logger as log
+from logger import (
+    CAT_AUTH, CAT_DEMANDA, CAT_API, CAT_SEGURANCA,
+    CAT_EXPORTACAO, CAT_API_KEY, CAT_USUARIO, CAT_SISTEMA,
+)
+
+# ── Rate limiting em memória ──────────────────────────────────────────────────
+_rl_lock  = threading.Lock()
+_rl_store = collections.defaultdict(list)   # chave_id -> [timestamps]
+RATE_LIMIT_MAX    = 100   # requisições
+RATE_LIMIT_WINDOW = 60    # segundos
 
 from flask import (
     Flask,
@@ -82,6 +96,37 @@ ORDENACAO_LABELS = {
 DIAS_ALERTA_PARADA = 7
 
 initialize_database()
+log.purgar_logs_antigos()   # usa política por categoria
+
+# ── Log de startup + verificação de integridade ───────────────────────────────
+_integridade_startup = log.verificar_integridade(limite=200)
+log.registrar(
+    CAT_SISTEMA, "sistema_iniciado", nivel="INFO",
+    detalhes={
+        "versao": "2.0",
+        "integridade_logs": _integridade_startup["integro"],
+        "total_logs_verificados": _integridade_startup["total"],
+        "falhas_hash": len(_integridade_startup["falhas"]),
+    },
+)
+
+
+def _log(categoria, acao, nivel="INFO", recurso_tipo=None, recurso_id=None,
+         usuario_id=None, usuario_nome=None, detalhes=None):
+    """Wrapper de log com contexto Flask injetado automaticamente."""
+    sid = session.get("csrf_token", "")[:8] if "csrf_token" in session else None
+    log.registrar(
+        categoria=categoria,
+        acao=acao,
+        nivel=nivel,
+        usuario_id=usuario_id if usuario_id is not None else session.get("usuario_id"),
+        usuario_nome=usuario_nome if usuario_nome is not None else session.get("usuario_nome"),
+        ip=request.remote_addr,
+        session_id=sid,
+        recurso_tipo=recurso_tipo,
+        recurso_id=recurso_id,
+        detalhes=detalhes,
+    )
 
 
 def login_required(f):
@@ -97,18 +142,47 @@ def login_required(f):
 def api_key_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        chave = request.headers.get("X-API-Key", "").strip()
+        chave    = request.headers.get("X-API-Key", "").strip()
+        ip       = request.remote_addr
+        endpoint = f"{request.method} {request.path}"
+
         if not chave:
+            log.registrar(CAT_API, "api_sem_chave", nivel="WARNING", ip=ip,
+                          detalhes={"endpoint": endpoint})
             return jsonify({"success": False, "error": "Header X-API-Key ausente"}), 401
+
         conn = get_db()
         try:
             row = conn.execute(
-                "SELECT id FROM api_keys WHERE chave = ? AND ativo = 1", (chave,)
+                "SELECT id, descricao FROM api_keys WHERE chave = ? AND ativo = 1", (chave,)
             ).fetchone()
         finally:
             conn.close()
+
         if not row:
+            mascarada = (chave[:8] + "••••") if len(chave) >= 8 else "••••"
+            log.registrar(CAT_API, "api_chave_invalida", nivel="WARNING", ip=ip,
+                          detalhes={"endpoint": endpoint, "chave_usada": mascarada})
             return jsonify({"success": False, "error": "Chave de API inválida ou desativada"}), 403
+
+        # ── Rate limiting ──────────────────────────────────────────────────
+        chave_id = row["id"]
+        agora    = time.time()
+        with _rl_lock:
+            _rl_store[chave_id] = [t for t in _rl_store[chave_id]
+                                   if agora - t < RATE_LIMIT_WINDOW]
+            if len(_rl_store[chave_id]) >= RATE_LIMIT_MAX:
+                log.registrar(CAT_API, "api_rate_limit", nivel="WARNING", ip=ip,
+                              detalhes={"endpoint": endpoint, "chave_desc": row["descricao"],
+                                        "limite": RATE_LIMIT_MAX, "janela_s": RATE_LIMIT_WINDOW})
+                return jsonify({
+                    "success": False,
+                    "error": f"Rate limit excedido: máximo {RATE_LIMIT_MAX} req/{RATE_LIMIT_WINDOW}s",
+                }), 429
+            _rl_store[chave_id].append(agora)
+
+        log.registrar(CAT_API, "api_chamada", nivel="INFO", ip=ip,
+                      detalhes={"endpoint": endpoint, "chave_desc": row["descricao"]})
         return f(*args, **kwargs)
     return decorated
 
@@ -141,6 +215,13 @@ def inject_globals():
 def _validate_csrf():
     token = request.form.get("csrf_token", "")
     if not token or token != session.get("csrf_token"):
+        log.registrar(
+            CAT_SEGURANCA, "csrf_falha", nivel="WARNING",
+            usuario_id=session.get("usuario_id"),
+            usuario_nome=session.get("usuario_nome"),
+            ip=request.remote_addr,
+            detalhes={"rota": request.path},
+        )
         abort(403)
 
 
@@ -290,6 +371,17 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         senha = request.form.get("senha", "").strip()
+        ip = request.remote_addr
+
+        # Detecta brute-force antes de autenticar
+        if log.verificar_brute_force(ip):
+            log.registrar(
+                CAT_SEGURANCA, "brute_force_detectado", nivel="CRITICAL",
+                ip=ip, detalhes={"username": username},
+            )
+            import time; time.sleep(2)
+            flash("Muitas tentativas. Aguarde alguns instantes e tente novamente.")
+            return render_template("login.html")
 
         usuario = authenticate_user(username, senha)
         if usuario:
@@ -298,9 +390,18 @@ def login():
             session["usuario_nome"] = usuario["nome"]
             session["usuario_username"] = usuario["username"]
             session["csrf_token"] = secrets.token_hex(32)
+            log.registrar(
+                CAT_AUTH, "login_sucesso", nivel="INFO",
+                usuario_id=usuario["id"], usuario_nome=usuario["nome"],
+                ip=ip, detalhes={"username": username},
+            )
             flash(f"Bem-vindo, {usuario['nome']}!")
             return redirect(url_for("dashboard"))
 
+        log.registrar(
+            CAT_AUTH, "login_falha", nivel="WARNING",
+            ip=ip, detalhes={"username": username},
+        )
         flash("Usuário ou senha incorretos.")
 
     return render_template("login.html")
@@ -310,6 +411,12 @@ def login():
 @login_required
 def logout():
     _validate_csrf()
+    log.registrar(
+        CAT_AUTH, "logout", nivel="INFO",
+        usuario_id=session.get("usuario_id"),
+        usuario_nome=session.get("usuario_nome"),
+        ip=request.remote_addr,
+    )
     session.clear()
     flash("Sessão encerrada com sucesso.")
     return redirect(url_for("login"))
@@ -406,11 +513,23 @@ def nova_demanda():
                     responsavel_id,
                 ),
             )
-            _registrar_historico(conn, cursor.lastrowid, None, STATUS_ABERTA, session["usuario_nome"], now)
+            nova_id = cursor.lastrowid
+            _registrar_historico(conn, nova_id, None, STATUS_ABERTA, session["usuario_nome"], now)
             conn.commit()
         finally:
             conn.close()
 
+        log.registrar(
+            CAT_DEMANDA, "demanda_criada", nivel="INFO",
+            usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+            ip=request.remote_addr, recurso_tipo="demanda", recurso_id=nova_id,
+            detalhes={
+                "titulo": form_data["titulo"],
+                "prioridade": form_data["prioridade"],
+                "responsavel_id": responsavel_id,
+                "data_prevista": data_prevista,
+            },
+        )
         flash("Demanda criada com sucesso.")
         return redirect(url_for("index"))
 
@@ -477,12 +596,24 @@ def editar(id):
                 flash("Selecione uma prioridade válida.")
                 return render_template("editar.html", demanda=demanda_atualizada, prioridades=PRIORIDADES, usuarios=usuarios)
 
+            # Registra campos alterados para auditoria
+            alteracoes = {}
+            if titulo     != demanda["titulo"]:     alteracoes["titulo"]     = {"de": demanda["titulo"],     "para": titulo}
+            if descricao  != demanda["descricao"]:  alteracoes["descricao"]  = {"de": demanda["descricao"],  "para": descricao}
+            if prioridade != demanda["prioridade"]: alteracoes["prioridade"] = {"de": demanda["prioridade"], "para": prioridade}
+
             conn.execute(
                 "UPDATE demandas SET titulo = ?, descricao = ?, prioridade = ?, "
                 "data_prevista = ?, responsavel_id = ? WHERE id = ?",
                 (titulo, descricao, prioridade, data_prevista, responsavel_id, id),
             )
             conn.commit()
+            log.registrar(
+                CAT_DEMANDA, "demanda_editada", nivel="INFO",
+                usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+                ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
+                detalhes={"alteracoes": alteracoes} if alteracoes else {"sem_alteracoes": True},
+            )
             flash("Demanda atualizada.")
             return redirect(url_for("detalhes", id=id))
 
@@ -509,6 +640,12 @@ def concluir(id):
         conn.commit()
     finally:
         conn.close()
+    log.registrar(
+        CAT_DEMANDA, "status_alterado", nivel="INFO",
+        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+        ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
+        detalhes={"de": demanda["status"], "para": STATUS_CONCLUIDA},
+    )
     flash("Demanda marcada como concluída.")
     return redirect(url_for("index"))
 
@@ -528,6 +665,12 @@ def reabrir(id):
         conn.commit()
     finally:
         conn.close()
+    log.registrar(
+        CAT_DEMANDA, "status_alterado", nivel="INFO",
+        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+        ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
+        detalhes={"de": demanda["status"], "para": STATUS_ABERTA},
+    )
     flash("Demanda reaberta.")
     return redirect(url_for("index"))
 
@@ -547,6 +690,12 @@ def andamento(id):
         conn.commit()
     finally:
         conn.close()
+    log.registrar(
+        CAT_DEMANDA, "status_alterado", nivel="INFO",
+        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+        ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
+        detalhes={"de": demanda["status"], "para": STATUS_EM_ANDAMENTO},
+    )
     flash("Demanda em andamento.")
     return redirect(url_for("detalhes", id=id))
 
@@ -566,6 +715,12 @@ def cancelar(id):
         conn.commit()
     finally:
         conn.close()
+    log.registrar(
+        CAT_DEMANDA, "status_alterado", nivel="INFO",
+        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+        ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
+        detalhes={"de": demanda["status"], "para": STATUS_CANCELADA},
+    )
     flash("Demanda cancelada.")
     return redirect(url_for("detalhes", id=id))
 
@@ -581,12 +736,25 @@ def deletar(id):
             abort(404)
         destino = "concluidas" if demanda["status"] == STATUS_CONCLUIDA else "index"
         if session["usuario_id"] != demanda["usuario_id"]:
+            log.registrar(
+                CAT_SEGURANCA, "acesso_negado", nivel="WARNING",
+                usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+                ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
+                detalhes={"acao_tentada": "deletar", "dono_id": demanda["usuario_id"]},
+            )
             flash("Apenas o solicitante da demanda pode deletá-la.")
             return redirect(url_for("detalhes", id=id))
+        titulo_deletada = demanda["titulo"]
         conn.execute("DELETE FROM demandas WHERE id = ?", (id,))
         conn.commit()
     finally:
         conn.close()
+    log.registrar(
+        CAT_DEMANDA, "demanda_deletada", nivel="WARNING",
+        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+        ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
+        detalhes={"titulo": titulo_deletada},
+    )
     flash("Demanda deletada.")
     return redirect(url_for(destino))
 
@@ -647,6 +815,13 @@ def detalhes(id):
     finally:
         conn.close()
 
+    # Melhoria 2 — log de acesso a registro sensível
+    _log(
+        CAT_DEMANDA, "demanda_visualizada",
+        recurso_tipo="demanda", recurso_id=id,
+        detalhes={"prioridade": demanda["prioridade"], "status": demanda["status"]},
+    )
+
     rota_voltar = "concluidas" if demanda["status"] in (STATUS_CONCLUIDA, STATUS_CANCELADA) else "index"
     return render_template(
         "detalhes.html",
@@ -687,6 +862,12 @@ def adicionar_comentario(demanda_id):
     finally:
         conn.close()
 
+    log.registrar(
+        CAT_DEMANDA, "comentario_adicionado", nivel="INFO",
+        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+        ip=request.remote_addr, recurso_tipo="demanda", recurso_id=demanda_id,
+        detalhes={"tamanho_chars": len(comentario)},
+    )
     flash("Comentário adicionado.")
     return redirect(url_for("detalhes", id=demanda_id))
 
@@ -701,9 +882,13 @@ def usuarios():
 @app.route("/api/alerts/count")
 @login_required
 def api_alerts_count():
+    """
+    Melhoria 1 — badge de alertas no navbar.
+    Retorna total de alertas: críticas atrasadas + eventos ERROR/CRITICAL nas últimas 24h.
+    """
     conn = get_db()
     try:
-        row = conn.execute(
+        criticas = conn.execute(
             """
             SELECT COUNT(*) as count FROM demandas
             WHERE prioridade = 'Crítica'
@@ -711,8 +896,21 @@ def api_alerts_count():
               AND data_prevista IS NOT NULL
               AND data_prevista < datetime('now', 'localtime')
             """
-        ).fetchone()
-        return jsonify({"count": row["count"]})
+        ).fetchone()["count"]
+
+        alertas_seg = conn.execute(
+            """
+            SELECT COUNT(*) as count FROM logs_sistema
+            WHERE nivel IN ('ERROR', 'CRITICAL')
+              AND timestamp >= datetime('now', '-24 hours', 'localtime')
+            """
+        ).fetchone()["count"]
+
+        return jsonify({
+            "count": criticas + alertas_seg,
+            "criticas_atrasadas": criticas,
+            "alertas_seguranca": alertas_seg,
+        })
     finally:
         conn.close()
 
@@ -1149,6 +1347,7 @@ def api_dashboard_data():
 def api_dashboard_export():
     tipo = request.args.get("type", "xlsx")
     where, params, filter_labels = _build_dashboard_filters()
+    _log_export_inicio = True  # flag para logar após contar registros
 
     conn = get_db()
     try:
@@ -1180,6 +1379,12 @@ def api_dashboard_export():
     finally:
         conn.close()
 
+    log.registrar(
+        CAT_EXPORTACAO, "export_realizado", nivel="INFO",
+        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+        ip=request.remote_addr,
+        detalhes={"formato": tipo, "total_registros": len(rows), "filtros": filter_labels},
+    )
     now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
     filter_desc = " · ".join(filter_labels) if filter_labels else "Sem filtros ativos"
     headers_row = [
@@ -1648,12 +1853,27 @@ def api_keys():
                     (nova_chave, descricao, session["usuario_id"]),
                 )
                 conn.commit()
+                log.registrar(
+                    CAT_API_KEY, "api_key_criada", nivel="INFO",
+                    usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+                    ip=request.remote_addr,
+                    detalhes={"descricao": descricao},
+                )
                 flash(f"Chave gerada: {nova_chave} — copie agora, não será exibida novamente.")
 
             elif acao == "revogar":
                 key_id = request.form.get("key_id")
+                row_key = conn.execute(
+                    "SELECT descricao FROM api_keys WHERE id = ?", (key_id,)
+                ).fetchone()
                 conn.execute("UPDATE api_keys SET ativo = 0 WHERE id = ?", (key_id,))
                 conn.commit()
+                log.registrar(
+                    CAT_API_KEY, "api_key_revogada", nivel="WARNING",
+                    usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+                    ip=request.remote_addr,
+                    detalhes={"key_id": key_id, "descricao": row_key["descricao"] if row_key else ""},
+                )
                 flash("Chave revogada com sucesso.")
 
             return redirect(url_for("api_keys"))
@@ -2072,6 +2292,310 @@ def api_v1_usuarios_list():
         return _api_ok([dict(r) for r in rows], total=len(rows))
     finally:
         conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AUDITORIA — Página de logs do sistema
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/auditoria")
+@login_required
+def auditoria():
+    nivel     = request.args.get("nivel", "").strip()
+    categoria = request.args.get("categoria", "").strip()
+    usuario_f = request.args.get("usuario", "").strip()
+    data_ini  = request.args.get("data_ini", "").strip()
+    data_fim  = request.args.get("data_fim", "").strip()
+    pagina    = max(int(request.args.get("pagina", 1)), 1)
+    por_pagina = 50
+
+    clauses, params = [], []
+    if nivel:
+        clauses.append("nivel = ?");    params.append(nivel)
+    if categoria:
+        clauses.append("categoria = ?"); params.append(categoria)
+    if usuario_f:
+        clauses.append("(usuario_nome LIKE ? OR ip LIKE ?)");
+        params += [f"%{usuario_f}%", f"%{usuario_f}%"]
+    if data_ini:
+        clauses.append("timestamp >= ?"); params.append(data_ini + " 00:00:00")
+    if data_fim:
+        clauses.append("timestamp <= ?"); params.append(data_fim + " 23:59:59")
+
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    conn = get_db()
+    try:
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM logs_sistema {where}", params
+        ).fetchone()[0]
+
+        offset = (pagina - 1) * por_pagina
+        logs = conn.execute(
+            f"""
+            SELECT id, timestamp, nivel, categoria, acao,
+                   usuario_nome, ip, recurso_tipo, recurso_id, detalhes
+            FROM logs_sistema {where}
+            ORDER BY id DESC
+            LIMIT ? OFFSET ?
+            """,
+            params + [por_pagina, offset],
+        ).fetchall()
+
+        # Contadores por nível para o resumo
+        contadores = {r["nivel"]: r["total"] for r in conn.execute(
+            "SELECT nivel, COUNT(*) as total FROM logs_sistema GROUP BY nivel"
+        ).fetchall()}
+
+        # Contadores por categoria
+        por_categoria = {r["categoria"]: r["total"] for r in conn.execute(
+            "SELECT categoria, COUNT(*) as total FROM logs_sistema GROUP BY categoria ORDER BY total DESC"
+        ).fetchall()}
+
+        usuarios_lista = conn.execute(
+            "SELECT DISTINCT usuario_nome FROM logs_sistema WHERE usuario_nome IS NOT NULL ORDER BY usuario_nome"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    total_paginas = max((total + por_pagina - 1) // por_pagina, 1)
+
+    return render_template(
+        "auditoria.html",
+        logs=logs,
+        total=total,
+        pagina=pagina,
+        total_paginas=total_paginas,
+        por_pagina=por_pagina,
+        contadores=contadores,
+        por_categoria=por_categoria,
+        usuarios_lista=usuarios_lista,
+        filtros={
+            "nivel": nivel, "categoria": categoria,
+            "usuario": usuario_f, "data_ini": data_ini, "data_fim": data_fim,
+        },
+        niveis=["INFO", "WARNING", "ERROR", "CRITICAL"],
+        categorias=["AUTH", "DEMANDA", "API", "SEGURANCA", "EXPORTACAO", "API_KEY", "USUARIO", "SISTEMA"],
+    )
+
+
+@app.route("/auditoria/export")
+@login_required
+def auditoria_export():
+    nivel     = request.args.get("nivel", "").strip()
+    categoria = request.args.get("categoria", "").strip()
+    data_ini  = request.args.get("data_ini", "").strip()
+    data_fim  = request.args.get("data_fim", "").strip()
+    formato   = request.args.get("format", "csv").strip().lower()   # Melhoria 8
+
+    clauses, params = [], []
+    if nivel:     clauses.append("nivel = ?");     params.append(nivel)
+    if categoria: clauses.append("categoria = ?"); params.append(categoria)
+    if data_ini:  clauses.append("timestamp >= ?"); params.append(data_ini + " 00:00:00")
+    if data_fim:  clauses.append("timestamp <= ?"); params.append(data_fim + " 23:59:59")
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT timestamp, nivel, categoria, acao,
+                   COALESCE(usuario_nome, 'anônimo') as usuario_nome,
+                   COALESCE(ip, '-') as ip,
+                   COALESCE(recurso_tipo, '') as recurso_tipo,
+                   COALESCE(CAST(recurso_id AS TEXT), '') as recurso_id,
+                   COALESCE(detalhes, '{{}}') as detalhes
+            FROM logs_sistema {where}
+            ORDER BY id DESC
+            """,
+            params,
+        ).fetchall()
+    finally:
+        conn.close()
+
+    log.registrar(
+        CAT_EXPORTACAO, "export_logs_realizado", nivel="INFO",
+        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
+        ip=request.remote_addr,
+        detalhes={
+            "formato": formato, "total_registros": len(rows),
+            "filtros": {"nivel": nivel, "categoria": categoria},
+        },
+    )
+
+    now_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+    headers_row = ["Timestamp", "Nível", "Categoria", "Ação", "Usuário", "IP",
+                   "Recurso Tipo", "Recurso ID", "Detalhes"]
+
+    # ── Melhoria 8: Export Excel ───────────────────────────────────────────────
+    if formato == "xlsx":
+        try:
+            from openpyxl import Workbook
+            from openpyxl.styles import Alignment, Font, PatternFill
+            from openpyxl.utils import get_column_letter
+        except ImportError:
+            return jsonify({"error": "openpyxl não instalado. Execute: pip install openpyxl"}), 500
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Logs de Auditoria"
+
+        ws.merge_cells("A1:I1")
+        ws["A1"] = "SGDI — Logs de Auditoria"
+        ws["A1"].font = Font(bold=True, size=14)
+        ws["A1"].alignment = Alignment(horizontal="center")
+
+        ws.merge_cells("A2:I2")
+        ws["A2"] = f"Gerado em: {now_str}"
+        ws["A2"].font = Font(size=10, color="666666")
+        ws["A2"].alignment = Alignment(horizontal="center")
+
+        ws.append([])
+
+        ws.append(headers_row)
+        header_fill = PatternFill(start_color="1E3A5F", end_color="1E3A5F", fill_type="solid")
+        for col_idx in range(1, len(headers_row) + 1):
+            cell = ws.cell(row=4, column=col_idx)
+            cell.fill = header_fill
+            cell.font = Font(bold=True, color="FFFFFF", size=10)
+            cell.alignment = Alignment(horizontal="center")
+
+        nivel_fills = {
+            "CRITICAL": PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+            "ERROR":    PatternFill(start_color="FEF2F2", end_color="FEF2F2", fill_type="solid"),
+            "WARNING":  PatternFill(start_color="FFFBEB", end_color="FFFBEB", fill_type="solid"),
+        }
+        nivel_fonts = {
+            "CRITICAL": Font(bold=True, color="B91C1C"),
+            "ERROR":    Font(color="DC2626"),
+            "WARNING":  Font(color="D97706"),
+        }
+
+        for r in rows:
+            ws.append([
+                r["timestamp"], r["nivel"], r["categoria"], r["acao"],
+                r["usuario_nome"], r["ip"], r["recurso_tipo"], r["recurso_id"], r["detalhes"],
+            ])
+            rn = ws.max_row
+            nivel_val = r["nivel"]
+            if nivel_val in nivel_fills:
+                for col in range(1, 10):
+                    ws.cell(row=rn, column=col).fill = nivel_fills[nivel_val]
+            if nivel_val in nivel_fonts:
+                ws.cell(row=rn, column=2).font = nivel_fonts[nivel_val]
+
+        for idx, width in enumerate([20, 10, 14, 26, 20, 16, 14, 10, 50], 1):
+            ws.column_dimensions[get_column_letter(idx)].width = width
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name="logs_auditoria.xlsx",
+        )
+
+    # ── CSV (padrão) ──────────────────────────────────────────────────────────
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["SGDI — Exportação de Logs de Auditoria"])
+    writer.writerow([f"Gerado em: {now_str}"])
+    writer.writerow([])
+    writer.writerow(headers_row)
+    for r in rows:
+        writer.writerow([
+            r["timestamp"], r["nivel"], r["categoria"], r["acao"],
+            r["usuario_nome"], r["ip"], r["recurso_tipo"], r["recurso_id"], r["detalhes"],
+        ])
+
+    output = buf.getvalue().encode("utf-8-sig")
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=logs_auditoria.csv"},
+    )
+
+
+# ── Melhoria 5: Métricas de logs para gráficos ───────────────────────────────
+@app.route("/api/auditoria/metricas")
+@login_required
+def api_auditoria_metricas():
+    """Retorna dados agregados de logs para o dashboard de métricas."""
+    conn = get_db()
+    try:
+        por_nivel = {r["nivel"]: r["total"] for r in conn.execute(
+            "SELECT nivel, COUNT(*) as total FROM logs_sistema GROUP BY nivel"
+        ).fetchall()}
+
+        por_categoria = [
+            {"label": r["categoria"], "total": r["total"]}
+            for r in conn.execute(
+                "SELECT categoria, COUNT(*) as total FROM logs_sistema "
+                "GROUP BY categoria ORDER BY total DESC LIMIT 10"
+            ).fetchall()
+        ]
+
+        por_dia = [
+            {"dia": r["dia"], "total": r["total"]}
+            for r in conn.execute(
+                """
+                SELECT date(timestamp) as dia, COUNT(*) as total
+                FROM logs_sistema
+                WHERE timestamp >= datetime('now', '-30 days', 'localtime')
+                GROUP BY dia ORDER BY dia
+                """
+            ).fetchall()
+        ]
+
+        erros_recentes = [
+            dict(r) for r in conn.execute(
+                """
+                SELECT timestamp, nivel, categoria, acao,
+                       COALESCE(usuario_nome, 'anônimo') as usuario_nome,
+                       COALESCE(ip, '-') as ip
+                FROM logs_sistema
+                WHERE nivel IN ('ERROR', 'CRITICAL')
+                ORDER BY id DESC LIMIT 10
+                """
+            ).fetchall()
+        ]
+
+        total_24h = conn.execute(
+            """
+            SELECT COUNT(*) as total FROM logs_sistema
+            WHERE timestamp >= datetime('now', '-24 hours', 'localtime')
+            """
+        ).fetchone()["total"]
+
+        return jsonify({
+            "por_nivel":      por_nivel,
+            "por_categoria":  por_categoria,
+            "por_dia":        por_dia,
+            "erros_recentes": erros_recentes,
+            "total_24h":      total_24h,
+        })
+    finally:
+        conn.close()
+
+
+# ── Melhoria 10: Verificação de integridade on-demand ────────────────────────
+@app.route("/api/admin/integridade")
+@login_required
+def api_admin_integridade():
+    """Verifica a cadeia de hashes dos logs e retorna o resultado."""
+    resultado = log.verificar_integridade(limite=500)
+    _log(
+        CAT_SISTEMA, "integridade_verificada",
+        nivel="WARNING" if not resultado["integro"] else "INFO",
+        detalhes={
+            "integro":  resultado["integro"],
+            "total":    resultado["total"],
+            "n_falhas": len(resultado["falhas"]),
+        },
+    )
+    return jsonify(resultado)
 
 
 if __name__ == "__main__":

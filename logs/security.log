@@ -1,0 +1,4 @@
+2026-05-26 20:24:00 | WARNING  | AUTH         | login_falha                  | user=anonimo                | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:25:27 | WARNING  | AUTH         | login_falha                  | user=anonimo                | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-05-26 20:26:29 | WARNING  | API          | api_chave_invalida           | user=anonimo                | ip=127.0.0.1        | sid=-        | {"endpoint": "GET /api/v1/demandas", "chave_usada": "chave-in••••"}
+2026-05-26 20:26:31 | WARNING  | API          | api_sem_chave                | user=anonimo                | ip=127.0.0.1        | sid=-        | {"endpoint": "GET /api/v1/demandas"}

@@ -1,6 +1,6 @@
 # SGDI — Sistema de Gestão de Demandas Internas
 
-Sistema web em Flask para gerenciar demandas internas com controle de acesso por usuário, priorização, rastreabilidade completa e API REST para integrações externas. Interface minimalista, moderna e totalmente responsiva (mobile-first).
+Sistema web em Flask para gerenciar demandas internas com controle de acesso por papel (RBAC), priorização, rastreabilidade completa, auditoria enterprise com cadeia de hashes, API REST documentada (Swagger) e dashboard gerencial interativo.
 
 ---
 
@@ -11,12 +11,15 @@ Sistema web em Flask para gerenciar demandas internas com controle de acesso por
 3. [Usuários de teste](#usuários-de-teste)
 4. [Funcionalidades](#funcionalidades)
 5. [Dashboard Gerencial](#dashboard-gerencial)
-6. [API REST Externa](#api-rest-externa)
-7. [Banco de dados](#banco-de-dados)
-8. [Segurança](#segurança)
-9. [Variáveis de ambiente](#variáveis-de-ambiente)
-10. [Estrutura do projeto](#estrutura-do-projeto)
-11. [Testes automatizados](#testes-automatizados)
+6. [Auditoria e Logs](#auditoria-e-logs)
+7. [API REST](#api-rest)
+8. [Banco de dados](#banco-de-dados)
+9. [Segurança](#segurança)
+10. [Variáveis de ambiente](#variáveis-de-ambiente)
+11. [Estrutura do projeto](#estrutura-do-projeto)
+12. [Rotas registradas](#rotas-registradas)
+13. [Testes automatizados](#testes-automatizados)
+14. [Documentos técnicos](#documentos-técnicos)
 
 ---
 
@@ -60,7 +63,7 @@ pip install -r requirements.txt
 python init_db.py
 ```
 
-Cria o arquivo `demandas.db`, as 4 tabelas, os 5 usuários de teste e 20 demandas de exemplo com comentários, responsáveis e histórico de status.
+Cria o arquivo `demandas.db`, as 7 tabelas, os 5 usuários de teste e 20 demandas de exemplo com comentários, responsáveis e histórico de status.
 
 ### 5. Inicie o servidor
 
@@ -70,19 +73,19 @@ python app.py
 
 ### 6. Acesse o sistema
 
-Abra o navegador em **http://localhost:5000** — a rota inicial já abre o Dashboard Gerencial.
+Abra o navegador em **http://localhost:5000** — redireciona automaticamente para o **Dashboard Gerencial**.
 
 ---
 
 ## Usuários de teste
 
-| Usuário | Senha | Perfil |
+| Usuário | Senha | Papel |
 |---|---|---|
-| `admin` | `Admin@2024` | Administrador |
-| `joao.silva` | `Joao@2024` | João Silva |
-| `maria.santos` | `Maria@2024` | Maria Santos |
-| `pedro.costa` | `Pedro@2024` | Pedro Costa |
-| `ana.lima` | `Ana@2024` | Ana Lima |
+| `admin` | `Admin@2024` | Administrador — acesso total |
+| `joao.silva` | `Joao@2024` | Gerente |
+| `maria.santos` | `Maria@2024` | Responsável |
+| `pedro.costa` | `Pedro@2024` | Solicitante |
+| `ana.lima` | `Ana@2024` | Solicitante |
 
 ---
 
@@ -90,11 +93,21 @@ Abra o navegador em **http://localhost:5000** — a rota inicial já abre o Dash
 
 ### Autenticação e Sessão
 
-- Tela de login com usuário e senha (hash bcrypt)
-- Sessão autenticada — todas as páginas exigem login via `@login_required`
-- Proteção CSRF em todos os formulários POST (token por sessão)
+- Login com usuário e senha (hash **PBKDF2-SHA256**, 260.000 iterações)
+- Sessão do lado do servidor — todas as páginas exigem login via `@login_required`
+- Proteção **CSRF** em todos os formulários POST (token `secrets.token_hex(32)` por sessão)
+- **Brute-force protection**: bloqueio automático após 5 tentativas falhas em 5 minutos
 - Botão "Sair" encerra a sessão e invalida o token CSRF
 - Após login, redireciona para o Dashboard Gerencial
+
+### Controle de Acesso por Papel (RBAC)
+
+| Papel | Permissões |
+|---|---|
+| `admin` | Tudo: criar, editar, excluir, gerenciar usuários, API Keys, auditoria completa |
+| `gerente` | Ver, criar, editar status, exportar, dashboard completo |
+| `responsavel` | Ver e atualizar status das demandas atribuídas |
+| `solicitante` | Criar demandas, ver as próprias |
 
 ### Demandas — Lista de Abertas (`/demandas`)
 
@@ -117,7 +130,6 @@ Abra o navegador em **http://localhost:5000** — a rota inicial já abre o Dash
 - Campos: título, descrição, prioridade, prazo previsto (SLA), responsável
 - Solicitante preenchido automaticamente pelo usuário logado
 - Prazo previsto alimenta os indicadores de atraso no Dashboard
-- Responsável pode ser atribuído no momento da criação
 - Registro automático de `None → Aberta` no histórico de status
 
 ### Editar demanda (`/editar/<id>`)
@@ -129,7 +141,6 @@ Abra o navegador em **http://localhost:5000** — a rota inicial já abre o Dash
 ### Detalhe da demanda (`/detalhes/<id>`)
 
 - Visualização completa: descrição, metadados, status, solicitante, responsável
-- Indicação visual "você" se a demanda pertence ao usuário logado
 - **Ações contextuais por status:**
   - **Aberta:** Iniciar andamento · Concluir · Cancelar · Editar (se solicitante)
   - **Em andamento:** Concluir · Cancelar · Reabrir
@@ -137,11 +148,11 @@ Abra o navegador em **http://localhost:5000** — a rota inicial já abre o Dash
 - Histórico de comentários em ordem cronológica
 - Formulário de novo comentário com autor preenchido automaticamente
 - **Histórico de status:** timeline completa de todas as transições com autor e timestamp
-- **Resumo operacional:** solicitante, responsável, prazo, prioridade, status
+- **Acesso registrado em auditoria:** cada visualização gera evento `demanda_visualizada`
 
 ### Transições de Status
 
-Toda mudança de status é registrada automaticamente na tabela `historico_status`:
+Toda mudança de status é registrada na tabela `historico_status` e na auditoria:
 
 | De | Para | Rota |
 |---|---|---|
@@ -151,17 +162,10 @@ Toda mudança de status é registrada automaticamente na tabela `historico_statu
 | Aberta / Em andamento | Cancelada | `/cancelar/<id>` |
 | Concluída / Cancelada | Aberta | `/reabrir/<id>` |
 
-### Responsável pela Execução
-
-- Campo `responsavel_id` separado do `usuario_id` (solicitante)
-- Permite atribuir um executor diferente de quem abriu a demanda
-- Exibido no resumo operacional, na tabela do dashboard e nas exportações
-- "Não atribuído" quando nenhum responsável foi definido
-
 ### Busca (`/buscar`)
 
 - Busca em demandas abertas por título, descrição ou solicitante
-- Respeita filtros de prioridade e ordenação ativos
+- Filtros de prioridade e ordenação
 - Metacaracteres SQL (`%`, `_`) tratados corretamente
 
 ### Usuários (`/usuarios`)
@@ -169,14 +173,12 @@ Toda mudança de status é registrada automaticamente na tabela `historico_statu
 - Painel com todos os usuários cadastrados
 - Por usuário: total de demandas, abertas, concluídas, alta prioridade
 - Barra de progresso de demandas abertas
-- Links para filtrar o painel por usuário
-- Métricas globais no topo
 
 ---
 
 ## Dashboard Gerencial
 
-O Dashboard (`/dashboard`) é a **tela inicial** do sistema. Atualiza automaticamente a cada 60 segundos via API JSON, sem recarregar a página.
+O Dashboard (`/dashboard`) é a **tela inicial** do sistema. Atualiza automaticamente a cada 60 segundos via API JSON.
 
 ### KPIs em tempo real
 
@@ -186,15 +188,15 @@ O Dashboard (`/dashboard`) é a **tela inicial** do sistema. Atualiza automatica
 | Abertas | Com percentual do total |
 | Em Andamento | Demandas em execução |
 | Concluídas | Com percentual do total |
-| Atrasadas (SLA) | Status não-final com `data_prevista` vencida |
+| Atrasadas (SLA) | Status não-final com prazo vencido |
 | Prioridade Crítica | Com contagem das atrasadas |
 | Tempo Médio de Resolução | Média ponderada por criticidade (dias) |
 
-### Gráficos (Chart.js)
+### Gráficos (Chart.js 4.x)
 
 - **Donut** — distribuição por status com percentuais
 - **Barras horizontais** — volume por prioridade
-- **Linha de evolução temporal** — demandas criadas vs. concluídas com granularidade diária, semanal ou mensal
+- **Linha de evolução temporal** — demandas criadas vs. concluídas (diário / semanal / mensal)
 
 ### Filtros
 
@@ -209,15 +211,19 @@ Todos os dados (KPIs, gráficos, tabelas, críticas) respondem aos filtros:
 
 ### Seção Críticas e Atrasadas
 
-Destaque visual **acima dos gráficos** para demandas com prioridade Crítica e SLA vencido:
+Destaque visual para demandas com prioridade Crítica e SLA vencido:
 
 - Tabela com: ID · Título · Responsável · Solicitante · Dias Atrasados · SLA Previsto · Status
-- Dias de atraso calculados via `julianday()` do SQLite
-- Exportação dedicada (somente esses casos) em **CSV**, **PDF** e **Excel**
+- Exportação dedicada em **CSV**, **PDF** e **Excel**
 
-### Tabela Por Responsável
+### Badges de Alerta na Navbar
 
-Visão por executor: total de demandas, abertas, atrasadas e críticas. Linhas com atraso são destacadas em amarelo.
+Dois badges atualizados a cada 60 segundos via `/api/alerts/count`:
+
+| Badge | Posição | Condição |
+|---|---|---|
+| Amarelo | Ao lado de "Dashboard" | Demandas críticas com SLA vencido |
+| Vermelho | Ao lado de "Auditoria" | Erros/críticos de segurança nas últimas 24h |
 
 ### Exportação
 
@@ -226,26 +232,76 @@ Visão por executor: total de demandas, abertas, atrasadas e críticas. Linhas c
 | Críticas + Atrasadas | CSV · PDF · Excel | `/api/dashboard/critical-overdue/export` |
 | Todas as demandas (filtros ativos) | CSV · PDF · Excel | `/api/dashboard/export` |
 
-### Badge de Alertas na Navbar
+---
 
-Contador vermelho ao lado de "Dashboard" visível em **todas as páginas**. Atualiza a cada 60 segundos via `/api/alerts/count`. Desaparece quando não há casos críticos atrasados.
+## Auditoria e Logs
+
+O módulo de auditoria (`/auditoria`) registra **todos os eventos** do sistema com rastreabilidade completa, cadeia de hashes tamper-evident e painel de métricas.
+
+### Destinos de Log
+
+| Destino | Arquivo / Tabela | Conteúdo | Retenção |
+|---|---|---|---|
+| SQLite | `logs_sistema` | Todos os eventos + hash chain | Por categoria |
+| Arquivo geral | `logs/sgdi.log` | Todos os eventos INFO+ | Rotativo 5 MB × 5 backups |
+| Arquivo segurança | `logs/security.log` | CRITICAL, ERROR, falhas de auth | Rotativo 5 MB × 5 backups |
+| Arquivo API | `logs/api_access.log` | Apenas chamadas REST | Rotativo 5 MB × 5 backups |
+
+### Cadeia de Hashes (Integridade)
+
+Cada registro em `logs_sistema` carrega um **hash SHA-256 encadeado**: `SHA256(conteudo + hash_anterior)`. Qualquer adulteração direta no banco invalida a cadeia. O endpoint `/api/admin/integridade` verifica os últimos 500 registros sob demanda.
+
+### Política de Retenção por Categoria
+
+| Categoria | Retenção | Justificativa |
+|---|---|---|
+| AUTH, SEGURANÇA, API_KEY | 365 dias | Compliance e investigação forense |
+| DEMANDA, EXPORTAÇÃO, USUÁRIO | 180 dias | Histórico de negócio |
+| SISTEMA | 90 dias | Diagnóstico operacional |
+| API | 30 dias | Volume alto — rotação rápida |
+
+### Painel de Métricas
+
+A página `/auditoria` inclui um painel colapsável com três gráficos Chart.js:
+- **Pizza** — distribuição por nível (INFO / WARNING / ERROR / CRITICAL)
+- **Barras** — distribuição por categoria
+- **Linha** — atividade dos últimos 7 dias
+
+### Filtros e Exportação
+
+- Filtre por nível, categoria, data, usuário e ação
+- Exporte em **CSV** ou **Excel** (`.xlsx` com linhas coloridas por severidade):
+  - CRITICAL → vermelho forte | ERROR → vermelho claro | WARNING → amarelo
+
+### As 10 Melhorias Implementadas
+
+| # | Melhoria |
+|---|---|
+| 1 | Badge de segurança vermelho na navbar (erros das últimas 24h) |
+| 2 | Log de visualização de demanda (`demanda_visualizada`) |
+| 3 | Verificação de integridade automática na inicialização |
+| 4 | Sanitização de campos sensíveis (`senha`, `token`, `key`, etc.) |
+| 5 | Endpoint `/api/auditoria/metricas` com agregados JSON |
+| 6 | Endpoint `/api/admin/integridade` para verificação sob demanda |
+| 7 | Painel de métricas com Chart.js na página de auditoria |
+| 8 | Exportação Excel da auditoria com coloração por severidade |
+| 9 | Rotação de logs por tamanho (5 MB × 5 backups) |
+| 10 | Política de retenção diferenciada por categoria |
 
 ---
 
-## API REST Externa
+## API REST
 
 O SGDI disponibiliza uma API REST para integração com sistemas externos, autenticada por **API Key**.
 
-### Geração de chaves (`/api/keys`)
+### Gerar chave (`/api/keys`)
 
 1. Faça login no sistema
 2. Acesse **API Keys** na navbar
 3. Informe uma descrição (ex: "Integração ERP") e clique em **Gerar chave**
-4. Copie a chave exibida — ela não será mostrada novamente
+4. Copie a chave exibida — ela **não será mostrada novamente** (apenas o hash SHA-256 é armazenado)
 
 ### Autenticação
-
-Inclua o header `X-API-Key` em toda requisição:
 
 ```http
 GET /api/v1/demandas HTTP/1.1
@@ -253,76 +309,40 @@ Host: localhost:5000
 X-API-Key: sua-chave-aqui
 ```
 
-Sem chave → `401`. Chave inválida ou revogada → `403`.
+| Situação | Código |
+|---|---|
+| Chave ausente | 401 |
+| Chave inválida ou revogada | 403 |
+| Limite de requisições excedido | 429 |
+| Sucesso | 200 / 201 |
+
+> **Rate limiting:** 60 requisições/minuto por chave (in-memory).
 
 ### Endpoints disponíveis
 
 #### Demandas
 
-```
-GET  /api/v1/demandas
-```
-Lista demandas com filtros opcionais.
-
-| Parâmetro | Tipo | Descrição |
+| Método | Rota | Descrição |
 |---|---|---|
-| `status` | string | Aberta · Em andamento · Concluída · Cancelada |
-| `prioridade` | string | Crítica · Alta · Média · Baixa |
-| `responsavel_id` | integer | ID do usuário responsável |
-| `limit` | integer | Máximo de resultados (padrão 50, máx 200) |
-| `offset` | integer | Paginação — registros a pular |
+| `GET` | `/api/v1/demandas` | Lista demandas (filtros: status, prioridade, responsavel_id, limit, offset) |
+| `POST` | `/api/v1/demandas` | Cria nova demanda |
+| `GET` | `/api/v1/demandas/<id>` | Detalhe completo de uma demanda |
+| `PATCH` | `/api/v1/demandas/<id>/status` | Atualiza status (registra no histórico) |
+| `GET` | `/api/v1/demandas/<id>/comentarios` | Lista comentários |
+| `POST` | `/api/v1/demandas/<id>/comentarios` | Adiciona comentário |
 
-```
-POST /api/v1/demandas
-```
-Cria uma nova demanda.
+#### Outros
 
-```json
-{
-  "titulo": "Falha no módulo de relatórios",
-  "descricao": "Trava ao gerar relatórios com mais de 1000 linhas.",
-  "solicitante": "Sistema ERP",
-  "prioridade": "Alta",
-  "responsavel_id": 2,
-  "data_prevista": "2026-06-30"
-}
-```
-
-```
-GET  /api/v1/demandas/<id>
-```
-Retorna detalhes completos de uma demanda.
-
-```
-PATCH /api/v1/demandas/<id>/status
-```
-Atualiza o status. Registra automaticamente no histórico.
-
-```json
-{ "status": "Em andamento", "autor": "Sistema ERP" }
-```
-
-#### Comentários
-
-```
-GET  /api/v1/demandas/<id>/comentarios
-POST /api/v1/demandas/<id>/comentarios
-```
-
-```json
-{ "autor": "Sistema ERP", "comentario": "Recebido e em análise." }
-```
-
-#### Usuários
-
-```
-GET /api/v1/usuarios
-```
-Lista todos os usuários com `id`, `username` e `nome`.
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/api/v1/usuarios` | Lista usuários ativos |
+| `GET` | `/api/alerts/count` | Contadores de alertas (criticas_atrasadas, alertas_seguranca) |
+| `GET` | `/api/dashboard/kpis` | KPIs do dashboard |
+| `GET` | `/api/dashboard/charts` | Dados dos gráficos |
+| `GET` | `/api/auditoria/metricas` | Métricas de auditoria (agregados JSON) |
+| `GET` | `/api/admin/integridade` | Verifica cadeia de hashes (apenas admin) |
 
 ### Formato de resposta
-
-Todas as respostas seguem o mesmo envelope:
 
 ```json
 {
@@ -340,55 +360,46 @@ Erros:
 
 ### Documentação Swagger
 
-Interface interativa disponível em **`/apidocs`** — lista todos os endpoints com parâmetros, exemplos e botão "Try it out" para testar direto no browser.
-
-### Gestão de chaves (`/api/keys`)
-
-- Listar todas as chaves cadastradas (mascaradas)
-- Ver quem criou e quando
-- Revogar chaves de sistemas que não precisam mais de acesso
+Interface interativa disponível em **`/apidocs`** — lista todos os endpoints com parâmetros, schemas e botão "Try it out".
 
 ---
 
 ## Banco de dados
 
 - Arquivo: `demandas.db` (SQLite, criado automaticamente)
+- `PRAGMA foreign_keys = ON` ativo em todas as conexões
 - Migrations automáticas via `PRAGMA table_info()` — nunca destrói dados existentes
-- Demandas sem vínculo com usuário são removidas na inicialização
-- Prioridades legadas (`Urgente`) são normalizadas para `Alta`
 
 ### Tabelas
 
 | Tabela | Descrição |
 |---|---|
-| `usuarios` | Usuários com username, nome e senha hash bcrypt |
-| `demandas` | Core do sistema — título, descrição, prioridade, status, solicitante, responsável, SLA |
-| `comentarios` | Comentários vinculados a demandas com autor e timestamp |
-| `historico_status` | Log auditável de toda transição de status com autor, status anterior/novo e data |
-| `api_keys` | Chaves de API para integração externa com descrição, criador e flag ativo/revogada |
-
-### Coluna `responsavel_id` em `demandas`
-
-Separa o **solicitante** (quem abriu, coluna `usuario_id`) do **responsável** (quem executa, coluna `responsavel_id`). O JOIN usa aliases distintos para evitar conflito:
-
-```sql
-LEFT JOIN usuarios resp ON resp.id = d.responsavel_id
-```
+| `usuarios` | Usuários com username, nome, papel e hash de senha PBKDF2 |
+| `demandas` | Core: título, descrição, prioridade, status, solicitante, responsável, SLA |
+| `comentarios` | Comentários vinculados a demandas |
+| `historico_status` | Log auditável de toda transição de status com autor e timestamp |
+| `api_keys` | Chaves de API (hash SHA-256, descrição, criador, expiração, flag ativa) |
+| `logs_sistema` | Audit trail completo com hash chain encadeado |
+| `alertas` | Alertas gerados pelo sistema para notificação no dashboard |
 
 ---
 
 ## Segurança
 
-| Categoria (OWASP) | Implementação |
+| Controle | Implementação |
 |---|---|
-| Broken Access Control | `@login_required` em todas as rotas; verificação de autoria antes de editar/deletar |
-| Cryptographic Failures | Senha com hash bcrypt via `werkzeug.security` |
-| Injection (SQL) | Queries 100% parametrizadas com placeholders `?` |
-| Injection (XSS) | Jinja2 auto-escape ativo em todos os templates |
-| Security Misconfiguration | `SECRET_KEY` gerada via `secrets.token_hex(32)` |
-| Auth & Session Failures | CSRF token por sessão validado em todo POST |
-| Logging Failures | `historico_status` registra toda transição com autor e timestamp |
-| API Authentication | `X-API-Key` validada em banco antes de qualquer operação da API v1 |
+| Autenticação | Session + PBKDF2-SHA256 (260.000 iterações) |
+| Autorização | RBAC — verificado por rota e por recurso |
+| CSRF | Token `secrets.token_hex(32)` em sessão, verificado em todo POST |
+| SQL Injection | Queries 100% parametrizadas (`?` placeholder) |
+| XSS | Jinja2 auto-escape em todos os templates |
+| Brute Force | Bloqueio após 5 falhas em 5 min (contador em `logs_sistema`) |
+| Rate Limiting | 60 req/min por API key (in-memory com `threading.Lock`) |
+| Dados sensíveis em logs | `_sanitizar()` mascara senha/token/key recursivamente |
+| Integridade de logs | SHA-256 hash chain em `logs_sistema` |
+| Expiração de chaves | Campo `expira_em` em `api_keys` |
+| Rotação de logs | `RotatingFileHandler` 5 MB × 5 backups |
+| Retenção diferenciada | Purga por categoria (30–365 dias) |
 
 ---
 
@@ -396,11 +407,13 @@ LEFT JOIN usuarios resp ON resp.id = d.responsavel_id
 
 | Variável | Padrão | Descrição |
 |---|---|---|
-| `SECRET_KEY` | valor fixo de desenvolvimento | Chave para assinar sessões Flask — **defina um valor seguro em produção** |
-| `FLASK_DEBUG` | `false` | `true` para ativar o modo debug do Flask |
+| `SECRET_KEY` | valor fixo de desenvolvimento | Chave para assinar sessões Flask — **defina valor seguro em produção** |
+| `DB_PATH` | `demandas.db` | Caminho para o arquivo SQLite |
+| `LOG_DIR` | `logs/` | Diretório para arquivos de log rotativos |
+| `FLASK_DEBUG` | `false` | `true` para ativar o modo debug |
 
 ```bash
-SECRET_KEY="chave-segura-aleatoria" FLASK_DEBUG=true python app.py
+SECRET_KEY="chave-segura-aleatoria" python app.py
 ```
 
 ---
@@ -409,38 +422,49 @@ SECRET_KEY="chave-segura-aleatoria" FLASK_DEBUG=true python app.py
 
 ```
 system_sgdi_legacy_student/
-├── app.py                    # Rotas, lógica, APIs REST, exportações, Swagger
-├── database.py               # Schema, migrations automáticas, seed de dados
-├── init_db.py                # Script de inicialização do banco
-├── requirements.txt          # Dependências Python
-├── gerar_relatorio_ia.py     # Gerador do relatório técnico de uso de IA (PDF)
-├── test_report.py            # Suite de testes automatizados + relatório PDF
-├── demandas.db               # Banco SQLite (gerado em runtime)
+├── app.py                        # Rotas, lógica, APIs REST, exportações, Swagger
+├── logger.py                     # Camada de auditoria: logging estruturado + hash chain
+├── database.py                   # Schema, migrations automáticas, seed de dados
+├── init_db.py                    # Script de inicialização do banco
+├── requirements.txt              # Dependências Python
+├── test_report.py                # Suite de testes automatizados (46 casos)
+├── gerar_decisoes.py             # Gerador PDF — 12 ADRs de decisões técnicas
+├── gerar_doc_completo.py         # Gerador PDF — documento técnico completo
+├── demandas.db                   # Banco SQLite (gerado em runtime)
+├── logs/
+│   ├── sgdi.log                  # Todos os eventos (rotativo)
+│   ├── security.log              # Eventos de segurança e falhas
+│   └── api_access.log            # Chamadas REST
 ├── static/
-│   ├── style.css             # Design system completo — todos os componentes
-│   └── ui.js                 # Filtros, paginação e interações client-side
+│   ├── style.css                 # Design system completo
+│   └── ui.js                     # Filtros, paginação e interações client-side
 └── templates/
-    ├── base.html             # Layout base: navbar, badge de alertas, CSRF
-    ├── login.html            # Tela de login (standalone)
-    ├── dashboard.html        # Dashboard gerencial com Chart.js e APIs JSON
-    ├── index.html            # Lista de demandas abertas
-    ├── concluidas.html       # Histórico de demandas concluídas/canceladas
-    ├── nova_demanda.html     # Formulário de criação (SLA + responsável)
-    ├── editar.html           # Edição de demanda (SLA + responsável)
-    ├── detalhes.html         # Detalhe completo + histórico de status + ações
-    ├── usuarios.html         # Rastreabilidade por usuário
-    └── api_keys.html         # Gestão de chaves de API
+    ├── base.html                 # Layout base: navbar, badges de alerta, CSRF
+    ├── login.html                # Tela de login
+    ├── dashboard.html            # Dashboard com KPIs, Chart.js e APIs JSON
+    ├── index.html                # Lista de demandas abertas
+    ├── concluidas.html           # Histórico de demandas concluídas/canceladas
+    ├── nova_demanda.html         # Formulário de criação
+    ├── editar.html               # Edição de demanda
+    ├── detalhes.html             # Detalhe completo + histórico + ações
+    ├── usuarios.html             # Rastreabilidade por usuário
+    ├── auditoria.html            # Logs de auditoria + painel de métricas
+    └── api_keys.html             # Gestão de chaves de API
 ```
 
-### Rotas registradas
+---
+
+## Rotas registradas
+
+### Interface Web
 
 | Rota | Método | Descrição |
 |---|---|---|
-| `/` e `/dashboard` | GET | Dashboard gerencial (rota inicial) |
+| `/` e `/dashboard` | GET | Dashboard gerencial (tela inicial) |
 | `/demandas` | GET | Lista de demandas abertas |
-| `/concluidas` | GET | Lista de demandas concluídas |
-| `/nova_demanda` | GET/POST | Criar nova demanda |
-| `/editar/<id>` | GET/POST | Editar demanda |
+| `/concluidas` | GET | Lista de demandas concluídas/canceladas |
+| `/nova_demanda` | GET / POST | Criar nova demanda |
+| `/editar/<id>` | GET / POST | Editar demanda |
 | `/detalhes/<id>` | GET | Detalhe da demanda |
 | `/concluir/<id>` | POST | Marcar como concluída |
 | `/reabrir/<id>` | POST | Reabrir demanda |
@@ -450,42 +474,90 @@ system_sgdi_legacy_student/
 | `/adicionar_comentario/<id>` | POST | Adicionar comentário |
 | `/buscar` | GET | Busca em demandas abertas |
 | `/usuarios` | GET | Rastreabilidade por usuário |
-| `/login` | GET/POST | Autenticação |
+| `/auditoria` | GET | Logs de auditoria com filtros e métricas |
+| `/auditoria/export` | GET | Exportar auditoria (`?format=csv` ou `?format=xlsx`) |
+| `/api/keys` | GET / POST | Gestão de API Keys (login obrigatório) |
+| `/login` | GET / POST | Autenticação |
 | `/logout` | POST | Encerrar sessão |
-| `/api/keys` | GET/POST | Gestão de API Keys (login obrigatório) |
 | `/apidocs` | GET | Documentação Swagger interativa |
-| `/api/alerts/count` | GET (JSON) | Contagem de críticas atrasadas (badge) |
-| `/api/dashboard/data` | GET (JSON) | KPIs + gráficos + críticas consolidados |
-| `/api/dashboard/export` | GET (file) | Exportação geral CSV/PDF/Excel |
-| `/api/dashboard/critical-overdue` | GET (JSON) | Críticas com SLA vencido |
-| `/api/dashboard/critical-overdue/export` | GET (file) | Exportação de críticas CSV/PDF/Excel |
-| `/api/v1/demandas` | GET/POST | API externa — listar e criar demandas |
-| `/api/v1/demandas/<id>` | GET | API externa — detalhe de demanda |
-| `/api/v1/demandas/<id>/status` | PATCH | API externa — atualizar status |
-| `/api/v1/demandas/<id>/comentarios` | GET/POST | API externa — comentários |
-| `/api/v1/usuarios` | GET | API externa — listar usuários |
+
+### APIs JSON (sessão)
+
+| Rota | Descrição |
+|---|---|
+| `/api/alerts/count` | Contadores de alertas para badges da navbar |
+| `/api/dashboard/kpis` | KPIs do dashboard |
+| `/api/dashboard/charts` | Dados dos gráficos |
+| `/api/dashboard/data` | KPIs + gráficos + críticas consolidados |
+| `/api/dashboard/critical-overdue` | Demandas críticas com SLA vencido |
+| `/api/dashboard/export` | Exportação geral CSV / PDF / Excel |
+| `/api/dashboard/critical-overdue/export` | Exportação de críticas CSV / PDF / Excel |
+| `/api/auditoria/metricas` | Métricas de auditoria (agregados JSON) |
+| `/api/admin/integridade` | Verificação da cadeia de hashes (apenas admin) |
+
+### API REST Externa (X-API-Key)
+
+| Método | Rota | Descrição |
+|---|---|---|
+| GET | `/api/v1/demandas` | Lista demandas (filtros, paginação) |
+| POST | `/api/v1/demandas` | Cria nova demanda |
+| GET | `/api/v1/demandas/<id>` | Detalhe de demanda |
+| PATCH | `/api/v1/demandas/<id>/status` | Atualiza status |
+| GET | `/api/v1/demandas/<id>/comentarios` | Lista comentários |
+| POST | `/api/v1/demandas/<id>/comentarios` | Adiciona comentário |
+| GET | `/api/v1/usuarios` | Lista usuários ativos |
 
 ---
 
 ## Testes automatizados
 
-### Suite de testes + relatório PDF (`test_report.py`)
-
-Executa casos de teste distribuídos em suites, captura screenshots de cada passo e gera `SGDI_Relatorio_Testes.pdf`.
-
 ```bash
+# Instalar driver do browser (apenas na primeira vez)
 playwright install chromium
+
+# Executar a suite completa
 python test_report.py
 ```
 
-| Suite | Escopo |
+O servidor deve estar rodando em `http://localhost:5000` antes de executar os testes.
+
+### Resultado
+
+**46/46 casos — 100% PASS**
+
+| Suite | Casos | Tipo | Escopo |
+|---|---|---|---|
+| TS1 — Autenticação | 5 | E2E | Login sucesso/falha, logout, CSRF, brute force |
+| TS2 — Demandas CRUD | 6 | E2E | Criar, listar, detalhar, log de visualização, status, concluir |
+| TS3 — Busca / Filtros | 3 | E2E | Busca por texto, filtro por prioridade, resultado vazio |
+| TS4 — Exportação | 2 | E2E + HTTP | CSV e Excel — content-type e tamanho |
+| TS5 — Usuários | 3 | E2E | Listar, criar, permissão de papel |
+| TS6 — Segurança | 3 | E2E | Acesso sem login, CSRF inválido, SQL injection |
+| TS7 — Auditoria | 7 | E2E + HTTP | Página, filtros, CSV, Excel, métricas, integridade |
+| TS8 — API Keys | 6 | E2E + HTTP | Criar chave, GET/POST REST, chave inválida, sem chave |
+| TS9 — Dashboard | 5 | E2E + HTTP | Página, KPIs JSON, charts JSON, alertas, export CSV |
+| TS10 — Relatórios | 6 | E2E + HTTP | PDF técnico, relatório gerencial, histórico, responsável |
+
+---
+
+## Documentos técnicos
+
+Dois PDFs de documentação são gerados pelos scripts incluídos:
+
+```bash
+# 12 ADRs — decisões arquiteturais com contexto, alternativas e racional
+python gerar_decisoes.py
+# → decisoes_tecnicas_sgdi.pdf
+
+# Documento técnico completo — todas as implementações (10 seções)
+python gerar_doc_completo.py
+# → documento_tecnico_completo_sgdi.pdf
+```
+
+| Documento | Conteúdo |
 |---|---|
-| TS1 | Autenticação (login/logout) |
-| TS2 | Criação e validação de demandas |
-| TS3 | Edição e controle de acesso |
-| TS4 | Filtros, busca e ordenação |
-| TS5 | Detalhe, comentários e rastreabilidade |
-| TS6 | Responsividade mobile |
+| `decisoes_tecnicas_sgdi.pdf` | 12 ADRs: Flask, SQLite, Jinja2 SSR, Sessions vs JWT, PBKDF2, CSRF, Logging, Hash Chain, Rate Limiting, Flasgger, openpyxl, Chart.js |
+| `documento_tecnico_completo_sgdi.pdf` | Visão geral, Autenticação, CRUD, Auditoria (10 melhorias), API REST, Dashboard, Testes (46 casos), Segurança, Guia de operação, Roadmap |
 
 ---
 
@@ -503,16 +575,16 @@ python init_db.py
 
 ---
 
-## Dependências principais
+## Dependências
 
 | Biblioteca | Versão mínima | Uso |
 |---|---|---|
 | Flask | 3.1.0 | Framework web |
-| Werkzeug | 3.1.0 | Hash de senhas bcrypt |
+| Werkzeug | 3.1.0 | Hash de senhas PBKDF2 |
 | openpyxl | 3.1.0 | Exportação Excel (.xlsx) |
-| reportlab | 4.0.0 | Exportação PDF |
+| reportlab | 4.0.0 | Geração de PDFs |
 | flasgger | 0.9.7 | Swagger UI e documentação OpenAPI |
-| playwright | 1.44.0 | Testes automatizados com browser |
+| playwright | 1.44.0 | Testes E2E com browser |
 | Pillow | 10.0.0 | Processamento de imagens nos testes |
 
 ---
