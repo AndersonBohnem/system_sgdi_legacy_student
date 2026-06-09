@@ -55,3 +55,4 @@
 2026-05-26 20:26:33 | INFO     | API          | api_chamada                  | user=anonimo                | ip=127.0.0.1        | sid=-        | {"endpoint": "POST /api/v1/demandas", "chave_desc": "Chave gerada pelo teste automatizado"}
 2026-05-26 20:26:38 | INFO     | EXPORTACAO   | export_realizado             | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"formato": "csv", "total_registros": 28, "filtros": []}
 2026-05-26 20:26:39 | INFO     | AUTH         | login_sucesso                | user=Administrador(id=1)    | ip=127.0.0.1        | sid=-        | {"username": "admin"}
+2026-06-05 12:34:16 | INFO     | SISTEMA      | sistema_iniciado             | user=anonimo                | ip=-                | sid=-        | {"versao": "2.0", "integridade_logs": true, "total_logs_verificados": 58, "falhas_hash": 0}

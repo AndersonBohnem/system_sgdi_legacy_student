@@ -622,107 +622,71 @@ def editar(id):
         conn.close()
 
 
-@app.route("/concluir/<int:id>", methods=["POST"])
-@login_required
-def concluir(id):
+def _transicionar_status(demanda_id, status_novo, flash_msg, redirect_to, extra_set=None):
+    """Aplica transição de status com CSRF, histórico e auditoria centralizados."""
     _validate_csrf()
+    ip  = request.remote_addr
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = get_db()
     try:
-        demanda = conn.execute("SELECT * FROM demandas WHERE id = ?", (id,)).fetchone()
+        demanda = conn.execute(
+            "SELECT * FROM demandas WHERE id = ?", (demanda_id,)
+        ).fetchone()
         if not demanda:
             abort(404)
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        set_parts  = ["status = ?"]
+        set_values = [status_novo]
+        if extra_set:
+            for col, val in extra_set.items():
+                set_parts.append(f"{col} = ?")
+                set_values.append(val)
+        set_values.append(demanda_id)
         conn.execute(
-            "UPDATE demandas SET status = ?, data_conclusao = ? WHERE id = ?",
-            (STATUS_CONCLUIDA, now, id),
+            f"UPDATE demandas SET {', '.join(set_parts)} WHERE id = ?",
+            set_values,
         )
-        _registrar_historico(conn, id, demanda["status"], STATUS_CONCLUIDA, session["usuario_nome"], now)
+        _registrar_historico(conn, demanda_id, demanda["status"], status_novo,
+                             session["usuario_nome"], now)
         conn.commit()
     finally:
         conn.close()
     log.registrar(
         CAT_DEMANDA, "status_alterado", nivel="INFO",
         usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
-        ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
-        detalhes={"de": demanda["status"], "para": STATUS_CONCLUIDA},
+        ip=ip, recurso_tipo="demanda", recurso_id=demanda_id,
+        detalhes={"de": demanda["status"], "para": status_novo},
     )
-    flash("Demanda marcada como concluída.")
-    return redirect(url_for("index"))
+    flash(flash_msg)
+    if redirect_to == "detalhes":
+        return redirect(url_for("detalhes", id=demanda_id))
+    return redirect(url_for(redirect_to))
+
+
+@app.route("/concluir/<int:id>", methods=["POST"])
+@login_required
+def concluir(id):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return _transicionar_status(id, STATUS_CONCLUIDA,
+                                 "Demanda marcada como concluída.", "index",
+                                 extra_set={"data_conclusao": now})
 
 
 @app.route("/reabrir/<int:id>", methods=["POST"])
 @login_required
 def reabrir(id):
-    _validate_csrf()
-    conn = get_db()
-    try:
-        demanda = conn.execute("SELECT * FROM demandas WHERE id = ?", (id,)).fetchone()
-        if not demanda:
-            abort(404)
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        conn.execute("UPDATE demandas SET status = ? WHERE id = ?", (STATUS_ABERTA, id))
-        _registrar_historico(conn, id, demanda["status"], STATUS_ABERTA, session["usuario_nome"], now)
-        conn.commit()
-    finally:
-        conn.close()
-    log.registrar(
-        CAT_DEMANDA, "status_alterado", nivel="INFO",
-        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
-        ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
-        detalhes={"de": demanda["status"], "para": STATUS_ABERTA},
-    )
-    flash("Demanda reaberta.")
-    return redirect(url_for("index"))
+    return _transicionar_status(id, STATUS_ABERTA, "Demanda reaberta.", "index")
 
 
 @app.route("/andamento/<int:id>", methods=["POST"])
 @login_required
 def andamento(id):
-    _validate_csrf()
-    conn = get_db()
-    try:
-        demanda = conn.execute("SELECT * FROM demandas WHERE id = ?", (id,)).fetchone()
-        if not demanda:
-            abort(404)
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        conn.execute("UPDATE demandas SET status = ? WHERE id = ?", (STATUS_EM_ANDAMENTO, id))
-        _registrar_historico(conn, id, demanda["status"], STATUS_EM_ANDAMENTO, session["usuario_nome"], now)
-        conn.commit()
-    finally:
-        conn.close()
-    log.registrar(
-        CAT_DEMANDA, "status_alterado", nivel="INFO",
-        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
-        ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
-        detalhes={"de": demanda["status"], "para": STATUS_EM_ANDAMENTO},
-    )
-    flash("Demanda em andamento.")
-    return redirect(url_for("detalhes", id=id))
+    return _transicionar_status(id, STATUS_EM_ANDAMENTO, "Demanda em andamento.", "detalhes")
 
 
 @app.route("/cancelar/<int:id>", methods=["POST"])
 @login_required
 def cancelar(id):
-    _validate_csrf()
-    conn = get_db()
-    try:
-        demanda = conn.execute("SELECT * FROM demandas WHERE id = ?", (id,)).fetchone()
-        if not demanda:
-            abort(404)
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        conn.execute("UPDATE demandas SET status = ? WHERE id = ?", (STATUS_CANCELADA, id))
-        _registrar_historico(conn, id, demanda["status"], STATUS_CANCELADA, session["usuario_nome"], now)
-        conn.commit()
-    finally:
-        conn.close()
-    log.registrar(
-        CAT_DEMANDA, "status_alterado", nivel="INFO",
-        usuario_id=session["usuario_id"], usuario_nome=session["usuario_nome"],
-        ip=request.remote_addr, recurso_tipo="demanda", recurso_id=id,
-        detalhes={"de": demanda["status"], "para": STATUS_CANCELADA},
-    )
-    flash("Demanda cancelada.")
-    return redirect(url_for("detalhes", id=id))
+    return _transicionar_status(id, STATUS_CANCELADA, "Demanda cancelada.", "detalhes")
 
 
 @app.route("/deletar/<int:id>", methods=["POST"])
@@ -998,86 +962,91 @@ def dashboard():
     )
 
 
+def _calcular_kpis(conn, where, params):
+    """Executa as queries de KPIs e por-responsável do dashboard (fonte única)."""
+    row = conn.execute(
+        f"""
+        SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN d.status = 'Aberta' THEN 1 ELSE 0 END) as abertas,
+            SUM(CASE WHEN d.status = 'Em andamento' THEN 1 ELSE 0 END) as em_andamento,
+            SUM(CASE WHEN d.status = 'Concluída' THEN 1 ELSE 0 END) as concluidas,
+            SUM(CASE WHEN d.status = 'Cancelada' THEN 1 ELSE 0 END) as canceladas,
+            SUM(CASE WHEN d.status NOT IN ('Concluída','Cancelada')
+                          AND d.data_prevista IS NOT NULL
+                          AND d.data_prevista < datetime('now','localtime')
+                     THEN 1 ELSE 0 END) as atrasadas,
+            SUM(CASE WHEN d.prioridade = 'Crítica' THEN 1 ELSE 0 END) as criticas,
+            SUM(CASE WHEN d.prioridade = 'Crítica'
+                          AND d.status NOT IN ('Concluída','Cancelada')
+                          AND d.data_prevista IS NOT NULL
+                          AND d.data_prevista < datetime('now','localtime')
+                     THEN 1 ELSE 0 END) as criticas_atrasadas,
+            CASE
+                WHEN SUM(CASE WHEN d.status='Concluída' AND d.data_conclusao IS NOT NULL
+                              THEN CASE WHEN d.prioridade='Crítica' THEN 2 ELSE 1 END END) > 0
+                THEN ROUND(
+                    SUM(CASE WHEN d.status='Concluída' AND d.data_conclusao IS NOT NULL
+                             THEN (julianday(d.data_conclusao) - julianday(d.data_criacao)) *
+                                  CASE WHEN d.prioridade='Crítica' THEN 2 ELSE 1 END END) /
+                    SUM(CASE WHEN d.status='Concluída' AND d.data_conclusao IS NOT NULL
+                             THEN CASE WHEN d.prioridade='Crítica' THEN 2 ELSE 1 END END)
+                , 1)
+                ELSE NULL
+            END as tempo_medio_dias
+        FROM demandas d
+        LEFT JOIN usuarios u ON u.id = d.responsavel_id
+        {where}
+        """,
+        params,
+    ).fetchone()
+
+    por_resp = conn.execute(
+        f"""
+        SELECT
+            COALESCE(u.nome, 'Não atribuído') as nome,
+            COUNT(d.id) as total,
+            SUM(CASE WHEN d.status IN ('Aberta','Em andamento') THEN 1 ELSE 0 END) as abertas,
+            SUM(CASE WHEN d.status NOT IN ('Concluída','Cancelada')
+                          AND d.data_prevista IS NOT NULL
+                          AND d.data_prevista < datetime('now','localtime')
+                     THEN 1 ELSE 0 END) as atrasadas,
+            SUM(CASE WHEN d.prioridade = 'Crítica' THEN 1 ELSE 0 END) as criticas
+        FROM demandas d
+        LEFT JOIN usuarios u ON u.id = d.responsavel_id
+        {where}
+        GROUP BY d.responsavel_id
+        ORDER BY abertas DESC, atrasadas DESC
+        """,
+        params,
+    ).fetchall()
+
+    total = row["total"] or 0
+    return {
+        "total": total,
+        "abertas": row["abertas"] or 0,
+        "em_andamento": row["em_andamento"] or 0,
+        "concluidas": row["concluidas"] or 0,
+        "canceladas": row["canceladas"] or 0,
+        "atrasadas": row["atrasadas"] or 0,
+        "criticas": row["criticas"] or 0,
+        "criticas_atrasadas": row["criticas_atrasadas"] or 0,
+        "tempo_medio_dias": row["tempo_medio_dias"],
+        "pct_abertas": round((row["abertas"] or 0) / total * 100) if total else 0,
+        "pct_concluidas": round((row["concluidas"] or 0) / total * 100) if total else 0,
+        "pct_atrasadas": round((row["atrasadas"] or 0) / total * 100) if total else 0,
+        "pct_criticas": round((row["criticas"] or 0) / total * 100) if total else 0,
+        "por_responsavel": [dict(r) for r in por_resp],
+    }
+
+
 @app.route("/api/dashboard/kpis")
 @login_required
 def api_dashboard_kpis():
     where, params, _ = _build_dashboard_filters()
     conn = get_db()
     try:
-        row = conn.execute(
-            f"""
-            SELECT
-                COUNT(*) as total,
-                SUM(CASE WHEN d.status = 'Aberta' THEN 1 ELSE 0 END) as abertas,
-                SUM(CASE WHEN d.status = 'Em andamento' THEN 1 ELSE 0 END) as em_andamento,
-                SUM(CASE WHEN d.status = 'Concluída' THEN 1 ELSE 0 END) as concluidas,
-                SUM(CASE WHEN d.status = 'Cancelada' THEN 1 ELSE 0 END) as canceladas,
-                SUM(CASE WHEN d.status NOT IN ('Concluída','Cancelada')
-                              AND d.data_prevista IS NOT NULL
-                              AND d.data_prevista < datetime('now','localtime')
-                         THEN 1 ELSE 0 END) as atrasadas,
-                SUM(CASE WHEN d.prioridade = 'Crítica' THEN 1 ELSE 0 END) as criticas,
-                SUM(CASE WHEN d.prioridade = 'Crítica'
-                              AND d.status NOT IN ('Concluída','Cancelada')
-                              AND d.data_prevista IS NOT NULL
-                              AND d.data_prevista < datetime('now','localtime')
-                         THEN 1 ELSE 0 END) as criticas_atrasadas,
-                CASE
-                    WHEN SUM(CASE WHEN d.status='Concluída' AND d.data_conclusao IS NOT NULL
-                                  THEN CASE WHEN d.prioridade='Crítica' THEN 2 ELSE 1 END END) > 0
-                    THEN ROUND(
-                        SUM(CASE WHEN d.status='Concluída' AND d.data_conclusao IS NOT NULL
-                                 THEN (julianday(d.data_conclusao) - julianday(d.data_criacao)) *
-                                      CASE WHEN d.prioridade='Crítica' THEN 2 ELSE 1 END END) /
-                        SUM(CASE WHEN d.status='Concluída' AND d.data_conclusao IS NOT NULL
-                                 THEN CASE WHEN d.prioridade='Crítica' THEN 2 ELSE 1 END END)
-                    , 1)
-                    ELSE NULL
-                END as tempo_medio_dias
-            FROM demandas d
-            LEFT JOIN usuarios u ON u.id = d.responsavel_id
-            {where}
-            """,
-            params,
-        ).fetchone()
-
-        por_resp = conn.execute(
-            f"""
-            SELECT
-                COALESCE(u.nome, 'Sem responsável') as nome,
-                COUNT(d.id) as total,
-                SUM(CASE WHEN d.status IN ('Aberta','Em andamento') THEN 1 ELSE 0 END) as abertas,
-                SUM(CASE WHEN d.status NOT IN ('Concluída','Cancelada')
-                              AND d.data_prevista IS NOT NULL
-                              AND d.data_prevista < datetime('now','localtime')
-                         THEN 1 ELSE 0 END) as atrasadas,
-                SUM(CASE WHEN d.prioridade = 'Crítica' THEN 1 ELSE 0 END) as criticas
-            FROM demandas d
-            LEFT JOIN usuarios u ON u.id = d.responsavel_id
-            {where}
-            GROUP BY d.usuario_id
-            ORDER BY abertas DESC, atrasadas DESC
-            """,
-            params,
-        ).fetchall()
-
-        total = row["total"] or 0
-        return jsonify({
-            "total": total,
-            "abertas": row["abertas"] or 0,
-            "em_andamento": row["em_andamento"] or 0,
-            "concluidas": row["concluidas"] or 0,
-            "canceladas": row["canceladas"] or 0,
-            "atrasadas": row["atrasadas"] or 0,
-            "criticas": row["criticas"] or 0,
-            "criticas_atrasadas": row["criticas_atrasadas"] or 0,
-            "tempo_medio_dias": row["tempo_medio_dias"],
-            "pct_abertas": round((row["abertas"] or 0) / total * 100) if total else 0,
-            "pct_concluidas": round((row["concluidas"] or 0) / total * 100) if total else 0,
-            "pct_atrasadas": round((row["atrasadas"] or 0) / total * 100) if total else 0,
-            "pct_criticas": round((row["criticas"] or 0) / total * 100) if total else 0,
-            "por_responsavel": [dict(r) for r in por_resp],
-        })
+        return jsonify(_calcular_kpis(conn, where, params))
     finally:
         conn.close()
 
@@ -1185,62 +1154,7 @@ def api_dashboard_data():
     gran = request.args.get("granularity", "mensal")
     conn = get_db()
     try:
-        row = conn.execute(
-            f"""
-            SELECT
-                COUNT(*) as total,
-                SUM(CASE WHEN d.status = 'Aberta' THEN 1 ELSE 0 END) as abertas,
-                SUM(CASE WHEN d.status = 'Em andamento' THEN 1 ELSE 0 END) as em_andamento,
-                SUM(CASE WHEN d.status = 'Concluída' THEN 1 ELSE 0 END) as concluidas,
-                SUM(CASE WHEN d.status = 'Cancelada' THEN 1 ELSE 0 END) as canceladas,
-                SUM(CASE WHEN d.status NOT IN ('Concluída','Cancelada')
-                              AND d.data_prevista IS NOT NULL
-                              AND d.data_prevista < datetime('now','localtime')
-                         THEN 1 ELSE 0 END) as atrasadas,
-                SUM(CASE WHEN d.prioridade = 'Crítica' THEN 1 ELSE 0 END) as criticas,
-                SUM(CASE WHEN d.prioridade = 'Crítica'
-                              AND d.status NOT IN ('Concluída','Cancelada')
-                              AND d.data_prevista IS NOT NULL
-                              AND d.data_prevista < datetime('now','localtime')
-                         THEN 1 ELSE 0 END) as criticas_atrasadas,
-                CASE
-                    WHEN SUM(CASE WHEN d.status='Concluída' AND d.data_conclusao IS NOT NULL
-                                  THEN CASE WHEN d.prioridade='Crítica' THEN 2 ELSE 1 END END) > 0
-                    THEN ROUND(
-                        SUM(CASE WHEN d.status='Concluída' AND d.data_conclusao IS NOT NULL
-                                 THEN (julianday(d.data_conclusao) - julianday(d.data_criacao)) *
-                                      CASE WHEN d.prioridade='Crítica' THEN 2 ELSE 1 END END) /
-                        SUM(CASE WHEN d.status='Concluída' AND d.data_conclusao IS NOT NULL
-                                 THEN CASE WHEN d.prioridade='Crítica' THEN 2 ELSE 1 END END)
-                    , 1)
-                    ELSE NULL
-                END as tempo_medio_dias
-            FROM demandas d
-            LEFT JOIN usuarios u ON u.id = d.responsavel_id
-            {where}
-            """,
-            params,
-        ).fetchone()
-
-        por_resp = conn.execute(
-            f"""
-            SELECT
-                COALESCE(u.nome, 'Não atribuído') as nome,
-                COUNT(d.id) as total,
-                SUM(CASE WHEN d.status IN ('Aberta','Em andamento') THEN 1 ELSE 0 END) as abertas,
-                SUM(CASE WHEN d.status NOT IN ('Concluída','Cancelada')
-                              AND d.data_prevista IS NOT NULL
-                              AND d.data_prevista < datetime('now','localtime')
-                         THEN 1 ELSE 0 END) as atrasadas,
-                SUM(CASE WHEN d.prioridade = 'Crítica' THEN 1 ELSE 0 END) as criticas
-            FROM demandas d
-            LEFT JOIN usuarios u ON u.id = d.responsavel_id
-            {where}
-            GROUP BY d.responsavel_id
-            ORDER BY abertas DESC, atrasadas DESC
-            """,
-            params,
-        ).fetchall()
+        kpis = _calcular_kpis(conn, where, params)
 
         por_status = conn.execute(
             f"""
@@ -1310,24 +1224,8 @@ def api_dashboard_data():
             """,
         ).fetchall()
 
-        total = row["total"] or 0
         return jsonify({
-            "kpis": {
-                "total": total,
-                "abertas": row["abertas"] or 0,
-                "em_andamento": row["em_andamento"] or 0,
-                "concluidas": row["concluidas"] or 0,
-                "canceladas": row["canceladas"] or 0,
-                "atrasadas": row["atrasadas"] or 0,
-                "criticas": row["criticas"] or 0,
-                "criticas_atrasadas": row["criticas_atrasadas"] or 0,
-                "tempo_medio_dias": row["tempo_medio_dias"],
-                "pct_abertas": round((row["abertas"] or 0) / total * 100) if total else 0,
-                "pct_concluidas": round((row["concluidas"] or 0) / total * 100) if total else 0,
-                "pct_atrasadas": round((row["atrasadas"] or 0) / total * 100) if total else 0,
-                "pct_criticas": round((row["criticas"] or 0) / total * 100) if total else 0,
-                "por_responsavel": [dict(r) for r in por_resp],
-            },
+            "kpis": kpis,
             "charts": {
                 "por_status": [{"label": r["label"], "total": r["total"]} for r in por_status],
                 "por_prioridade": [{"label": r["label"], "total": r["total"]} for r in por_prioridade],
@@ -1340,6 +1238,57 @@ def api_dashboard_data():
         })
     finally:
         conn.close()
+
+
+def _build_xlsx(sheet_title, title, subtitle, headers, rows, col_widths,
+                header_color="2563EB", title_color="000000", subtitle_color="666666",
+                row_styler=None):
+    """Cria workbook Excel formatado e retorna BytesIO pronto para send_file."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        return None
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = sheet_title
+    n = len(headers)
+    last = get_column_letter(n)
+
+    ws.merge_cells(f"A1:{last}1")
+    ws["A1"] = title
+    ws["A1"].font = Font(bold=True, size=14, color=title_color)
+    ws["A1"].alignment = Alignment(horizontal="center")
+
+    ws.merge_cells(f"A2:{last}2")
+    ws["A2"] = subtitle
+    ws["A2"].font = Font(size=10, color=subtitle_color)
+    ws["A2"].alignment = Alignment(horizontal="center")
+
+    ws.append([])
+    ws.append(headers)
+    hdr_row = ws.max_row
+    fill_hdr = PatternFill(start_color=header_color, end_color=header_color, fill_type="solid")
+    for c in range(1, n + 1):
+        cell = ws.cell(row=hdr_row, column=c)
+        cell.fill = fill_hdr
+        cell.font = Font(bold=True, color="FFFFFF", size=10)
+        cell.alignment = Alignment(horizontal="center")
+
+    for row_data in rows:
+        ws.append(list(row_data))
+        if row_styler:
+            row_styler(ws, ws.max_row, row_data)
+
+    for idx, width in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
 
 
 @app.route("/api/dashboard/export")
@@ -1419,41 +1368,7 @@ def api_dashboard_export():
         return _export_pdf(rows, now_str, filter_desc, filter_labels)
 
     # Excel export (default)
-    try:
-        from openpyxl import Workbook
-        from openpyxl.styles import Alignment, Font, PatternFill
-        from openpyxl.utils import get_column_letter
-    except ImportError:
-        return jsonify({"error": "openpyxl não instalado. Execute: pip install openpyxl"}), 500
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Demandas"
-
-    ws.merge_cells("A1:I1")
-    ws["A1"] = "SGDI — Sistema de Gestão de Demandas"
-    ws["A1"].font = Font(bold=True, size=14)
-    ws["A1"].alignment = Alignment(horizontal="center")
-
-    ws.merge_cells("A2:I2")
-    ws["A2"] = "Dashboard Gerencial de Demandas"
-    ws["A2"].font = Font(size=11, color="444444")
-    ws["A2"].alignment = Alignment(horizontal="center")
-
-    ws.merge_cells("A3:I3")
-    ws["A3"] = f"Gerado em: {now_str}"
-    ws["A3"].font = Font(size=10, color="666666")
-    ws["A3"].alignment = Alignment(horizontal="center")
-
-    ws.append([])
-
-    ws.append(headers_row)
-    header_fill = PatternFill(start_color="2563EB", end_color="2563EB", fill_type="solid")
-    for col_idx in range(1, len(headers_row) + 1):
-        cell = ws.cell(row=5, column=col_idx)
-        cell.fill = header_fill
-        cell.font = Font(bold=True, color="FFFFFF", size=10)
-        cell.alignment = Alignment(horizontal="center")
+    from openpyxl.styles import Font, PatternFill  # apenas para row_styler
 
     priority_fills = {
         "Crítica": PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
@@ -1462,38 +1377,37 @@ def api_dashboard_export():
         "Baixa":   PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid"),
     }
     status_fills = {
-        "Aberta":        PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid"),
-        "Em andamento":  PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid"),
-        "Concluída":     PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid"),
-        "Cancelada":     PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid"),
+        "Aberta":       PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid"),
+        "Em andamento": PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid"),
+        "Concluída":    PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid"),
+        "Cancelada":    PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid"),
     }
 
-    for r in rows:
-        ws.append([
-            r["id"], r["titulo"], r["responsavel"], r["prioridade"],
-            r["status"], r["data_criacao"], r["data_prevista"],
-            r["data_conclusao"], r["atrasada"],
-        ])
-        rn = ws.max_row
-        if r["prioridade"] in priority_fills:
-            ws.cell(row=rn, column=4).fill = priority_fills[r["prioridade"]]
-        if r["status"] in status_fills:
-            ws.cell(row=rn, column=5).fill = status_fills[r["status"]]
-        if r["atrasada"] == "Sim":
+    def _style_dash(ws, rn, r):
+        if r[3] in priority_fills:
+            ws.cell(row=rn, column=4).fill = priority_fills[r[3]]
+        if r[4] in status_fills:
+            ws.cell(row=rn, column=5).fill = status_fills[r[4]]
+        if r[8] == "Sim":
             ws.cell(row=rn, column=9).font = Font(bold=True, color="DC2626")
 
-    ws.append([])
-    ws.merge_cells(f"A{ws.max_row + 1}:I{ws.max_row + 1}")
-    ws.append([f"Filtros aplicados: {filter_desc}"])
-    ws.cell(row=ws.max_row, column=1).font = Font(italic=True, color="666666")
-    ws.merge_cells(f"A{ws.max_row}:I{ws.max_row}")
-
-    for idx, width in enumerate([6, 42, 22, 12, 15, 20, 20, 20, 10], 1):
-        ws.column_dimensions[get_column_letter(idx)].width = width
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
+    row_tuples = [
+        (r["id"], r["titulo"], r["responsavel"], r["prioridade"],
+         r["status"], r["data_criacao"], r["data_prevista"],
+         r["data_conclusao"], r["atrasada"])
+        for r in rows
+    ]
+    buf = _build_xlsx(
+        "Demandas",
+        "SGDI — Sistema de Gestão de Demandas",
+        f"Dashboard Gerencial · Gerado em: {now_str}  |  {filter_desc}",
+        headers_row,
+        row_tuples,
+        [6, 42, 22, 12, 15, 20, 20, 20, 10],
+        row_styler=_style_dash,
+    )
+    if buf is None:
+        return jsonify({"error": "openpyxl não instalado. Execute: pip install openpyxl"}), 500
     return send_file(
         buf,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1559,55 +1473,37 @@ def api_dashboard_critical_overdue_export():
         return _export_critical_pdf(rows, now_str)
 
     # Excel (default)
-    try:
-        from openpyxl import Workbook
-        from openpyxl.styles import Alignment, Font, PatternFill
-        from openpyxl.utils import get_column_letter
-    except ImportError:
-        return jsonify({"error": "openpyxl não instalado. Execute: pip install openpyxl"}), 500
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Críticas e Atrasadas"
-
-    ws.merge_cells("A1:H1")
-    ws["A1"] = "SGDI — Relatório: Críticas e Atrasadas"
-    ws["A1"].font = Font(bold=True, size=14, color="DC2626")
-    ws["A1"].alignment = Alignment(horizontal="center")
-
-    ws.merge_cells("A2:H2")
-    ws["A2"] = f"Gerado em: {now_str} · Prioridade CRÍTICA · SLA vencido"
-    ws["A2"].font = Font(size=10, color="B91C1C")
-    ws["A2"].alignment = Alignment(horizontal="center")
-
-    ws.append([])
-
-    ws.append(headers_row)
-    header_fill = PatternFill(start_color="DC2626", end_color="DC2626", fill_type="solid")
-    for col_idx in range(1, len(headers_row) + 1):
-        cell = ws.cell(row=4, column=col_idx)
-        cell.fill = header_fill
-        cell.font = Font(bold=True, color="FFFFFF", size=10)
-        cell.alignment = Alignment(horizontal="center")
+    from openpyxl.styles import Font, PatternFill  # apenas para row_styler
 
     alt_fill = PatternFill(start_color="FFF5F5", end_color="FFF5F5", fill_type="solid")
-    for i, r in enumerate(rows):
-        ws.append([
-            r["id"], r["titulo"], r["responsavel"], r["solicitante"], r["status"],
-            r["data_criacao"], r["data_prevista"], r["dias_atrasados"],
-        ])
-        rn = ws.max_row
+    _row_counter = [0]
+
+    def _style_critical(ws, rn, r):
         ws.cell(row=rn, column=8).font = Font(bold=True, color="DC2626")
-        if i % 2 == 1:
+        _row_counter[0] += 1
+        if _row_counter[0] % 2 == 0:
             for col in range(1, 9):
                 ws.cell(row=rn, column=col).fill = alt_fill
 
-    for idx, width in enumerate([6, 42, 22, 22, 15, 20, 20, 16], 1):
-        ws.column_dimensions[get_column_letter(idx)].width = width
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
+    row_tuples = [
+        (r["id"], r["titulo"], r["responsavel"], r["solicitante"],
+         r["status"], r["data_criacao"], r["data_prevista"], r["dias_atrasados"])
+        for r in rows
+    ]
+    buf = _build_xlsx(
+        "Críticas e Atrasadas",
+        "SGDI — Relatório: Críticas e Atrasadas",
+        f"Gerado em: {now_str}  ·  Prioridade CRÍTICA  ·  SLA vencido",
+        headers_row,
+        row_tuples,
+        [6, 42, 22, 22, 15, 20, 20, 16],
+        header_color="DC2626",
+        title_color="DC2626",
+        subtitle_color="B91C1C",
+        row_styler=_style_critical,
+    )
+    if buf is None:
+        return jsonify({"error": "openpyxl não instalado. Execute: pip install openpyxl"}), 500
     return send_file(
         buf,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2429,36 +2325,7 @@ def auditoria_export():
 
     # ── Melhoria 8: Export Excel ───────────────────────────────────────────────
     if formato == "xlsx":
-        try:
-            from openpyxl import Workbook
-            from openpyxl.styles import Alignment, Font, PatternFill
-            from openpyxl.utils import get_column_letter
-        except ImportError:
-            return jsonify({"error": "openpyxl não instalado. Execute: pip install openpyxl"}), 500
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Logs de Auditoria"
-
-        ws.merge_cells("A1:I1")
-        ws["A1"] = "SGDI — Logs de Auditoria"
-        ws["A1"].font = Font(bold=True, size=14)
-        ws["A1"].alignment = Alignment(horizontal="center")
-
-        ws.merge_cells("A2:I2")
-        ws["A2"] = f"Gerado em: {now_str}"
-        ws["A2"].font = Font(size=10, color="666666")
-        ws["A2"].alignment = Alignment(horizontal="center")
-
-        ws.append([])
-
-        ws.append(headers_row)
-        header_fill = PatternFill(start_color="1E3A5F", end_color="1E3A5F", fill_type="solid")
-        for col_idx in range(1, len(headers_row) + 1):
-            cell = ws.cell(row=4, column=col_idx)
-            cell.fill = header_fill
-            cell.font = Font(bold=True, color="FFFFFF", size=10)
-            cell.alignment = Alignment(horizontal="center")
+        from openpyxl.styles import Font, PatternFill  # apenas para row_styler
 
         nivel_fills = {
             "CRITICAL": PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
@@ -2471,25 +2338,31 @@ def auditoria_export():
             "WARNING":  Font(color="D97706"),
         }
 
-        for r in rows:
-            ws.append([
-                r["timestamp"], r["nivel"], r["categoria"], r["acao"],
-                r["usuario_nome"], r["ip"], r["recurso_tipo"], r["recurso_id"], r["detalhes"],
-            ])
-            rn = ws.max_row
-            nivel_val = r["nivel"]
+        def _style_audit(ws, rn, r):
+            nivel_val = r[1]
             if nivel_val in nivel_fills:
                 for col in range(1, 10):
                     ws.cell(row=rn, column=col).fill = nivel_fills[nivel_val]
             if nivel_val in nivel_fonts:
                 ws.cell(row=rn, column=2).font = nivel_fonts[nivel_val]
 
-        for idx, width in enumerate([20, 10, 14, 26, 20, 16, 14, 10, 50], 1):
-            ws.column_dimensions[get_column_letter(idx)].width = width
-
-        buf = io.BytesIO()
-        wb.save(buf)
-        buf.seek(0)
+        row_tuples = [
+            (r["timestamp"], r["nivel"], r["categoria"], r["acao"],
+             r["usuario_nome"], r["ip"], r["recurso_tipo"], r["recurso_id"], r["detalhes"])
+            for r in rows
+        ]
+        buf = _build_xlsx(
+            "Logs de Auditoria",
+            "SGDI — Logs de Auditoria",
+            f"Gerado em: {now_str}",
+            headers_row,
+            row_tuples,
+            [20, 10, 14, 26, 20, 16, 14, 10, 50],
+            header_color="1E3A5F",
+            row_styler=_style_audit,
+        )
+        if buf is None:
+            return jsonify({"error": "openpyxl não instalado. Execute: pip install openpyxl"}), 500
         return send_file(
             buf,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
