@@ -5,6 +5,7 @@ import secrets
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 from functools import wraps
 import os
 
@@ -53,7 +54,16 @@ from database import (
 
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "sgdi-dev-key-troque-em-producao-2024")
+_env_secret = os.environ.get("SECRET_KEY")
+if _env_secret:
+    app.secret_key = _env_secret
+else:
+    _key_file = Path(".secret_key")
+    if _key_file.exists():
+        app.secret_key = _key_file.read_text().strip()
+    else:
+        app.secret_key = secrets.token_hex(32)
+        _key_file.write_text(app.secret_key)
 
 Swagger(app, template={
     "swagger": "2.0",

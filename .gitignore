@@ -1,3 +1,6 @@
+# ── Chave de sessão local (gerada automaticamente em dev) ─────────────────────
+.secret_key
+
 # ── Banco de dados ────────────────────────────────────────────────────────────
 demandas.db
 *.db
